@@ -1,157 +1,79 @@
-# Construction Budgeting Platform
+﻿# Construction Budgeting Platform
 
-.NET 8 and React platform for a focused construction ERP budgeting workflow. The project is designed to connect the main technical stack used in a domain-heavy business application: Hexagonal / Clean Architecture, DDD, CQRS, MediatR, MassTransit, RabbitMQ, PostgreSQL, SQL Server, SignalR, React, TypeScript, and React Query.
+Construction ERP services for project quotations, resource costing, budget comparison, and margin calculation. Changes to quantities and resource prices propagate between services through an event bus, with real-time updates to the quotation workspace.
 
-This is not a full ERP suite. The scope is a realistic ERP slice around project quotes, work compositions, budget recalculation, margin impact, and real-time collaboration.
+**Project status:** scope and architecture documented; application implementation has not started. See the [delivery checklist](docs/TODO.md) for verified progress and the next task.
 
-## Business Scope
+## Core workflow
 
-The reference scenario is a construction project quote, such as an office renovation. A user updates the quantity or unit price of a quote line, and the system propagates the impact through compositions, budget, margin, and the client-facing quote.
+1. Create a project and a draft quotation.
+2. Add work items with quantities, sales prices, and material/labor compositions.
+3. Change a quote quantity, sales price, or resource cost.
+4. Recalculate estimated cost, compare it with the existing budget, and update margin.
+5. Notify connected clients and refresh the affected quotation data.
 
-Core business concepts:
+The initial release uses EUR, tax-exclusive amounts, fixed sales prices, and linear resource consumption. Resource-cost changes affect costs and margin without automatically changing customer sales prices.
 
-| Concept | Meaning |
+## Architecture
+
+Four independently runnable .NET services share versioned integration contracts:
+
+| Service | Responsibility |
 | --- | --- |
-| Project | The business container for a construction job |
-| Quote / Devis | The price proposal shown to the customer |
-| Quote line | A priced work item, such as painting or flooring |
-| Composition | The labor, material, equipment, and supplier cost breakdown behind a quote line |
-| Budget | Internal cost planning and control |
-| Cost | Expected internal expense |
-| Margin | Difference between customer price and internal cost |
-| Collaboration | Real-time updates for users working on the same project data |
+| Sales / Vente | Projects, draft quotations, sales amounts, final margin view, REST API and SignalR |
+| Library | Material and labor resources and their cost prices |
+| Compositions | Work-item recipes, resource-price projections and quote cost calculations |
+| Budget | Read existing budget baselines and calculate budget variance |
 
-## Target Stack
-
-| Area | Technology |
-| --- | --- |
-| Backend | .NET 8, ASP.NET Core Web API |
-| Frontend | React, TypeScript, React Query |
-| Architecture | Hexagonal / Clean Architecture, Domain-Driven Design, CQRS |
-| In-process messaging | MediatR commands, queries, and domain events |
-| Inter-module messaging | MassTransit with RabbitMQ |
-| Sales/Vente store | PostgreSQL read-write database |
-| Budget store | SQL Server read-only database |
-| Real-time communication | SignalR / WebSockets |
-| Quality | Unit tests and integration tests |
-
-## Architecture Approach
-
-Each module follows the same dependency rule: domain and use cases stay inside the module, while API, persistence, messaging, and real-time infrastructure stay outside behind ports and adapters.
-
-DDD depth depends on business complexity:
-
-| Module | Architecture focus |
-| --- | --- |
-| Sales / Quotes | Full DDD model: aggregate, entities, value objects, domain events, CQRS use cases |
-| Compositions | Business recalculation rules triggered by integration events |
-| Budgets | Read-only budget store, budget impact calculation, margin view |
-| Collaboration | Lightweight domain focused on real-time delivery through SignalR |
-
-## Modules
+Each service keeps business rules separate from persistence, transport and API adapters. MediatR dispatches commands, queries and domain-event handlers within a process; MassTransit/RabbitMQ carries integration events between services.
 
 ```mermaid
 flowchart LR
-    Projects[Projects]
-    Sales[Sales / Quotes<br/>PostgreSQL read-write]
-    Compositions[Compositions]
-    Budgets[Budgets<br/>SQL Server read-only]
-    Collaboration[Collaboration<br/>SignalR]
-    RabbitMQ[(RabbitMQ)]
-    React[React Client]
-
-    Projects --> Sales
-    Sales --> Compositions
-    Compositions --> Budgets
-    Budgets --> Collaboration
-
-    Sales -. integration events .-> RabbitMQ
-    Compositions -. integration events .-> RabbitMQ
-    Budgets -. integration events .-> RabbitMQ
-    RabbitMQ -. consume .-> Compositions
-    RabbitMQ -. consume .-> Budgets
-    RabbitMQ -. consume .-> Collaboration
-    Collaboration --> React
+    UI[React workspace] -->|REST| Sales[Sales]
+    UI -->|REST| Library[Library]
+    Sales -->|QuoteInputsChanged| MQ[(RabbitMQ)]
+    Library -->|ResourcePriceChanged| MQ
+    MQ -->|input events| Compositions[Compositions]
+    Compositions -->|CompositionCosted| MQ
+    MQ -->|cost snapshot| Budget[Budget]
+    SQL[(SQL Server)] -->|read-only baseline| Budget
+    Budget -->|BudgetImpactCalculated| MQ
+    MQ -->|result| Sales
+    Sales -->|SignalR notification| UI
 ```
 
-## Main Workflow
+## Technology
 
-```text
-Project created
-  -> Quote created
-  -> Quote line quantity or unit price changed
-  -> Sales module saves the change to PostgreSQL
-  -> MediatR publishes an in-process domain event
-  -> MassTransit publishes an integration event through RabbitMQ
-  -> Composition module recalculates work item cost
-  -> Budget module reads SQL Server budget data and recalculates budget impact
-  -> Margin is updated
-  -> SignalR pushes the update to the React client
-```
+| Area | Target stack |
+| --- | --- |
+| Backend | .NET 8, C#, ASP.NET Core REST APIs |
+| Frontend | React, TypeScript, React Query |
+| Architecture | Hexagonal / Clean Architecture, DDD, CQRS |
+| In-process dispatch | MediatR |
+| Integration events | MassTransit, RabbitMQ |
+| Persistence | EF Core, PostgreSQL, SQL Server read adapter |
+| Real-time updates | SignalR |
+| Local runtime | Docker, Docker Compose |
+| Verification | Focused unit and integration tests; browser acceptance checks |
 
-## Event Flow
+## Data ownership
 
-```mermaid
-sequenceDiagram
-    participant React
-    participant Sales
-    participant MediatR
-    participant RabbitMQ
-    participant Composition
-    participant Budget
-    participant SignalR
+PostgreSQL is the read/write Vente store. The `sales`, `library`, `compositions`, and `budget_projection` schemas are owned by their respective services. Services do not read or write each other's tables; cross-service updates use integration events.
 
-    React->>Sales: Update quote line
-    Sales->>MediatR: QuoteLineUpdatedDomainEvent
-    Sales->>RabbitMQ: QuoteLineUpdatedIntegrationEvent
-    RabbitMQ->>Composition: Consume quote line update
-    Composition->>RabbitMQ: CompositionRecalculatedIntegrationEvent
-    RabbitMQ->>Budget: Consume composition update
-    Budget->>RabbitMQ: BudgetRecalculatedIntegrationEvent
-    RabbitMQ->>SignalR: Consume budget update
-    SignalR->>React: Push recalculation update
-```
+SQL Server supplies the existing budget baseline through a read-only application account. Initialization scripts own baseline setup. Calculated budget variance and message-processing state belong in PostgreSQL, without updating the SQL Server baseline.
 
-## Planned Structure
+Sharing one PostgreSQL database simplifies local operation while retaining service-level ownership. It does not provide independent database availability for each service.
 
-```text
-src/
-  ConstructionBudgeting.Api
-  ConstructionBudgeting.Modules.Projects
-  ConstructionBudgeting.Modules.Sales
-  ConstructionBudgeting.Modules.Compositions
-  ConstructionBudgeting.Modules.Budgets
-  ConstructionBudgeting.Modules.Collaboration
-  ConstructionBudgeting.SharedKernel
-  ConstructionBudgeting.Messaging
+## Initial release boundary
 
-tests/
-  ConstructionBudgeting.Domain.Tests
-  ConstructionBudgeting.Application.Tests
-  ConstructionBudgeting.Integration.Tests
-```
+The release covers draft quotations, resource cost changes, composition calculations, budget comparison, margin, single-instance SignalR, basic concurrency protection, and duplicate/stale-message handling.
 
-## Delivery Plan
+Kubernetes, cloud deployment, CI/CD pipelines, authentication/authorization, Redis, service replication, approval workflows, purchasing, invoicing and automatic sales-price adjustment are outside this release. The runtime target is a local Docker Compose environment.
 
-1. Create the .NET 8 solution, module projects, and React app.
-2. Model the Sales quote aggregate with TDD: `Quote`, `QuoteLine`, `Money`, `Quantity`.
-3. Add CQRS use cases through MediatR: create quote, add quote line, update quote line, get quote.
-4. Add PostgreSQL persistence for the Sales/Vente read-write store.
-5. Add MassTransit and RabbitMQ for inter-module integration events.
-6. Add Composition recalculation after quote line changes.
-7. Add Budget recalculation using SQL Server as a read-only Budget store.
-8. Add margin impact calculation.
-9. Add SignalR updates and a React Query page for quote editing and live budget display.
-10. Add focused unit and integration tests for the business workflow.
+## Development and progress
 
-## Current Focus
+- [Delivery checklist and current handoff](docs/TODO.md)
+- [Two-week implementation plan](docs/implementation-plan.zh-CN.md)
+- [Architecture and business decisions](docs/architecture-decisions.zh-CN.md)
 
-The first implementation goal is to connect the main stack end to end:
-
-```text
-React -> Web API -> CQRS/MediatR -> DDD aggregate -> PostgreSQL
-  -> MassTransit/RabbitMQ -> Budget module -> SQL Server read-only
-  -> SignalR -> React
-```
-
-Advanced infrastructure patterns such as authentication, outbox, idempotent consumers, Kubernetes deployment, and CI/CD can be added later if needed. They are not part of the first learning path.
+Build and run commands will be added after the solution and Compose configuration are implemented and verified. Planned capabilities are tracked as open checklist items until validated.
