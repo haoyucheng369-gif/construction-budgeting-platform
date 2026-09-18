@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\ConstructionBudgeting.Sales.Application\ConstructionBudgeting.Sales.Application.csproj" />
+    <ProjectReference Include="..\ConstructionBudgeting.Sales.Infrastructure\ConstructionBudgeting.Sales.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+</Project>

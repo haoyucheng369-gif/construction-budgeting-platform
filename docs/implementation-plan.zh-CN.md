@@ -6,7 +6,7 @@
 
 完成一条可运行的 ERP 报价流程：报价编辑 → 成本组成重算 → 读取预算基准 → 更新预算差额和毛利 → 页面实时更新。同时支持从资源库改价触发受影响报价重算。
 
-当前处于开发准备阶段，没有应用代码。架构与业务口径见 [architecture-decisions.zh-CN.md](architecture-decisions.zh-CN.md)。
+T01 已完成：Sales 分层宿主与基础设施已验证；业务用例从 T02 开始。架构与业务口径见 [architecture-decisions.zh-CN.md](architecture-decisions.zh-CN.md)。
 
 ## 范围
 

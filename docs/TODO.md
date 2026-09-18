@@ -5,12 +5,14 @@
 ## 当前交接
 
 - 最近更新：2026-09-18。
-- 当前阶段：范围与实施计划已整理；应用实现尚未开始。
-- 当前代码任务：无；下一项为 **T01**。
-- 已验证：文档、相互链接、固定金额样例；没有运行应用或业务测试。
-- 下一步：检查 `dotnet --info`、`node --version`、Docker 可用性；记录兼容版本，创建 solution 与 Sales 宿主，然后配置三个基础设施容器。
-- 阻塞点：暂无已确认阻塞；工具链与容器环境尚未检查。
-- 已知限制：目前没有 `.sln`、应用源码、Dockerfile、Compose 配置、迁移或测试。文档中的能力均为待实现设计。
+- 当前阶段：**T01 已完成**，Sales 宿主与基础设施已验证。
+- 当前代码任务：无；下一项为 **T02.1**。
+- 实施约定：按 [CONTEXT.md](CONTEXT.md) 每次只推进一小步，先讲设计再实现；讨论问题时不自动写业务代码；理由记录在架构决策第 8 节。
+- 已验证：locked-mode 还原、编译 0 警告/0 错误、2 项宿主集成测试；实际 HTTP `/health` 返回 200 Healthy；三个容器健康；PostgreSQL Sales schema 可读写且隔离；SQL Server 基准可读且 UPDATE 被拒绝；RabbitMQ 管理接口认证成功；预算初始化可重复执行。
+- 下一步：先带用户看 Sales 四层项目及实际引用方向，解释请求调用与代码依赖的区别；随后进入 T02.1 的一个最小模型与规则测试，不一次完成所有模型、API 和持久化。关联预算的预置项目标识为 `11111111-1111-1111-1111-111111111111`。
+- 环境：Windows；SDK 8.0.425 / 运行时 8.0.31 已在用户目录单独安装；原 SDK 10.0.300 保留；Node 22.22.0、npm 10.9.4；Docker 29.1.3、Compose 2.40.3。
+- 阻塞点：无。新 PowerShell 会话先执行 `. ./scripts/Use-Dotnet.ps1` 选择 SDK；Docker Desktop 需运行。
+- 已知限制：其他三个业务宿主、报价模型、React 页面和服务间消息尚未实现；当前 API 健康检查不覆盖依赖，需单独运行基础设施检查。应用 Dockerfile 在 T09；React 在 T03。
 
 ## 已完成准备
 
@@ -22,11 +24,13 @@
 
 ### T01 环境与骨架（第 1 天）
 
-- [ ] T01.1 检查 .NET 8 SDK、Node、Docker；锁定兼容依赖/镜像版本，记录选择依据。
-- [ ] T01.2 创建 solution、Sales 宿主、必要分层和测试项目；提供健康检查。
-- [ ] T01.3 配置 PostgreSQL、SQL Server、RabbitMQ 的 Compose、持久卷、配置示例和独立初始化脚本。
+- [x] T01.1 检查 .NET 8 SDK、Node、Docker；锁定已引入依赖/镜像版本，记录选择依据；业务包随相应任务引入。
+- [x] T01.2 创建 solution、Sales 宿主、必要分层和测试项目；提供健康检查。
+- [x] T01.3 配置 PostgreSQL、SQL Server、RabbitMQ 的 Compose、持久卷、配置示例和独立初始化脚本。
 
 验收：基础设施健康可连接，Sales 启动并返回健康结果；记录实际命令。缺少某工具时说明阻塞并继续不依赖它的实现。
+
+验证记录：`dotnet restore ConstructionBudgeting.sln --locked-mode`、`dotnet build ConstructionBudgeting.sln --no-restore`、`dotnet test ConstructionBudgeting.sln --no-build --no-restore` 均通过，测试 2/2；`./scripts/Test-Infrastructure.ps1` 全部通过；`docker compose ps` 三个服务为 healthy。启动命令见 README。
 
 ### T02 报价模型与 API（第 2 天）
 
@@ -118,3 +122,6 @@ Kubernetes、云、CI/CD、鉴权、Redis、多实例、自动定价与完整端
 | 日期 | 任务 | 修改与验证 | 接续动作 |
 | --- | --- | --- | --- |
 | 2026-09-18 | P01–P03 | 收敛交付范围，更新 README、实施计划和架构决策，建立 TODO 与 AGENTS；校对文档链接和金额样例；未运行应用测试 | T01：环境检查与 Sales 骨架 |
+| 2026-09-18 | T01.1–T01.3 | 新增 solution、Sales 四层、宿主集成测试、Compose、初始化/验证脚本、版本锁定；build 0 警告，test 2/2，HTTP 200，三个容器与账号隔离检查通过 | T02.1：报价领域模型与规则测试 |
+| 2026-09-18 | 设计说明 | 补充服务划分、四层依赖、DDD 聚合、命令查询与事件通信的理由及代价；本次仅文档变更 | T02.1：先说明聚合边界与业务不变量，再实现模型 |
+| 2026-09-18 | 上下文接续 | 新增 CONTEXT，记录小步推进、解释优先、CQRS 范围与排除项；AGENTS 设置接续入口，TODO 校正下一步；本次未改业务代码 | 先介绍已有 Sales 骨架和引用关系 |

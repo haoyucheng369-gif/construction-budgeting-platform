@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net8.0": {
+      "constructionbudgeting.sales.application": {
+        "type": "Project",
+        "dependencies": {
+          "ConstructionBudgeting.Sales.Domain": "[1.0.0, )"
+        }
+      },
+      "constructionbudgeting.sales.domain": {
+        "type": "Project"
+      }
+    }
+  }
+}

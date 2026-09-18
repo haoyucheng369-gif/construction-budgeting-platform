@@ -1,1 +1,14 @@
 tmp/
+**/bin/
+**/obj/
+.vs/
+.idea/
+**/TestResults/
+coverage/
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+*.user
+*.suo

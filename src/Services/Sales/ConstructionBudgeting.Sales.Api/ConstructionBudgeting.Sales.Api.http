@@ -1,0 +1,6 @@
+﻿@Sales_HostAddress = http://127.0.0.1:5080
+
+GET {{Sales_HostAddress}}/health
+Accept: text/plain
+
+###

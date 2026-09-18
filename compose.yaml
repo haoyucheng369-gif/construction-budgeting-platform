@@ -1,0 +1,80 @@
+name: construction-budgeting
+
+services:
+  postgres:
+    image: postgres:17.11-alpine
+    environment:
+      POSTGRES_DB: vente
+      POSTGRES_USER: cb_admin
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?Initialize .env first}
+      SALES_DB_PASSWORD: ${SALES_DB_PASSWORD:?Initialize .env first}
+      LIBRARY_DB_PASSWORD: ${LIBRARY_DB_PASSWORD:?Initialize .env first}
+      COMPOSITIONS_DB_PASSWORD: ${COMPOSITIONS_DB_PASSWORD:?Initialize .env first}
+      BUDGET_PROJECTION_DB_PASSWORD: ${BUDGET_PROJECTION_DB_PASSWORD:?Initialize .env first}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/initialize.sh:/docker-entrypoint-initdb.d/10-services.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cb_admin -d vente"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-CU27-ubuntu-22.04
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?Initialize .env first}
+    ports:
+      - "127.0.0.1:1433:1433"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'SQLCMDPASSWORD="$${MSSQL_SA_PASSWORD}" /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -b -Q "SELECT 1" -o /dev/null'
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  sqlserver-init:
+    image: mcr.microsoft.com/mssql/server:2022-CU27-ubuntu-22.04
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    environment:
+      SQLCMDPASSWORD: ${MSSQL_SA_PASSWORD:?Initialize .env first}
+      BUDGET_DB_PASSWORD: ${BUDGET_DB_PASSWORD:?Initialize .env first}
+    entrypoint: ["/bin/bash", "/init/initialize.sh"]
+    volumes:
+      - ./infra/sqlserver:/init:ro
+    restart: "no"
+
+  rabbitmq:
+    image: rabbitmq:4.2.9-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: cb_app
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Initialize .env first}
+      RABBITMQ_DEFAULT_VHOST: construction
+    hostname: construction-rabbitmq
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 15s
+
+volumes:
+  postgres-data:
+  sqlserver-data:
+  rabbitmq-data:
