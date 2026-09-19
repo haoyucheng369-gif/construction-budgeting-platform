@@ -12,7 +12,9 @@ T01 已完成：Sales 分层宿主与基础设施已验证；业务用例从 T02
 
 保留 .NET 8、React/TypeScript/React Query、Clean/Hexagonal、DDD、CQRS、MediatR、MassTransit/RabbitMQ、PostgreSQL、SQL Server 只读、SignalR、Docker Compose。
 
-四个业务服务按顺序接入：Sales、Library、Compositions、Budget。每个服务独立运行，内部按 Domain、Application、Infrastructure、API 分层；不用把每层和每个概念都拆成独立项目。
+四个业务服务按顺序接入：Sales、Library、Compositions、Budget。每个服务独立运行。Sales 保留 Clean Architecture 四层；Compositions 在 T04.3 / T05 按六边形的业务核心、输入/输出端口与适配器组织；Library、Budget 延续简单分层。不用把每层和每个概念都拆成独立项目。
+
+先介绍 Sales 骨架并完成一个小用例，再在进入 Compositions 时对照说明端口与适配器的边界。两者统一遵循依赖向内，沿用相同的事件与数据所有权约定；不增加服务、业务流程或额外排期阶段。详细取舍见架构决策第 8 节。
 
 页面只保留项目选择、资源价格表、报价工作台。工作台包含报价行、成本明细、预算差额、毛利和计算状态。配方和初始资源通过种子数据提供，不开发配方编辑器。
 
@@ -38,7 +40,7 @@ T01 已完成：Sales 分层宿主与基础设施已验证；业务用例从 T02
 | 技术 | 本期达到的程度 |
 | --- | --- |
 | DDD | Sales 的 Quote 聚合、QuoteLine、Money、Quantity 与明确业务约束；其他服务按复杂度保持简单 |
-| Clean / Hexagonal | 业务层不依赖数据库和消息总线，用接口隔离外部访问 |
+| Clean / Hexagonal | Sales 使用 Clean 四层，Compositions 明确实现输入/输出端口与适配器；业务规则不依赖数据库和消息总线，使用测试替身验证核心并单独检查真实适配器 |
 | CQRS / MediatR | 分开读写用例，用处理器串起业务；不增加独立读服务或 Event Sourcing |
 | 微服务 | 四个宿主可分别启动与重启，至少一条真正跨进程事件链 |
 | MassTransit / RabbitMQ | 消费与发布、有限重试、错误日志/队列、持久化去重和版本保护 |
