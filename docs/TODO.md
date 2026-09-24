@@ -6,15 +6,15 @@
 
 - 最近更新：2026-09-24。
 - 当前阶段：**T01 已完成，T02.1 进行中**；六大阶段总览见 [实施计划](implementation-plan.zh-CN.md)。
-- 当前代码任务：**T02.1 部分完成，T02.1a 已完成**：Quantity 值对象及领域单元测试；下一小步为 Money，尚未实现。
+- 当前代码任务：**T02.1 部分完成，T02.1a / T02.1b 已完成**：Quantity 与 Money 值对象及测试。下一小步为 QuoteLine，尚未实现。
 - 实施约定：按 [CONTEXT.md](CONTEXT.md) 每次只推进一小步，先讲设计再实现；讨论问题时不自动写业务代码；理由记录在架构决策第 8 节。
 - 架构约定：Sales 保留 Clean 四层；Compositions 在 T04.3 / T05 明确采用六边形端口与适配器，并与 Sales 对照说明；Library、Budget 延续简单分层。六大阶段写入实施计划，完成状态只在本清单维护。
-- 本次验证（2026-09-24）：locked-mode 还原通过；编译 0 警告/0 错误；8 项 Quantity 领域测试与原有 2 项宿主集成测试全部通过。未运行数据库/消息集成检查，未启动 Docker 或独立 API 进程。
+- 本次验证（2026-09-24，Money）：locked-mode 还原通过；编译 0 警告/0 错误；26 项领域测试（Quantity 8 + Money 18）与原有 2 项宿主集成测试全部通过。未运行数据库/消息集成检查，未启动 Docker 或独立 API 进程。
 - 历史验证（2026-09-18）：实际 HTTP `/health` 返回 200 Healthy；三个容器健康；PostgreSQL Sales schema 可读写且隔离；SQL Server 基准可读且 UPDATE 被拒绝；RabbitMQ 管理接口认证成功；预算初始化可重复执行。2026-09-24 会话中只读检查 `docker compose ps -a` 时 Docker Linux 引擎不可连接；历史健康状态不代表当前可用。
-- 下一步：先带用户看 `src/Services/Sales/ConstructionBudgeting.Sales.Domain/Quotations/Quantity.cs` 与对应测试，解释不可变、构造校验和值相等；再讲解 Money 的币种、金额精度和正负约束边界后实现该小步，不一次完成 QuoteLine、Quote、API 或持久化。关联预算的预置项目标识为 `11111111-1111-1111-1111-111111111111`。
+- 下一步：先回顾 `src/Services/Sales/ConstructionBudgeting.Sales.Domain/Quotations/Money.cs` 与测试，解释金额精度、显式舍入、负金额和售价约束的区别；随后讲解并实现一个最小 QuoteLine，将工程项/单位、Quantity、销售单价 Money 与行金额关联，拒绝负售价及空值。明确报价行的身份与修改最终由 Quote 控制，不同时完成 Quote、API 或持久化。关联预算的预置项目标识为 `11111111-1111-1111-1111-111111111111`。
 - 环境：Windows；SDK 8.0.425 / 运行时 8.0.31 已在用户目录单独安装；原 SDK 10.0.300 保留；Node 22.22.0、npm 10.9.4；Docker 29.1.3、Compose 2.40.3。
 - 阻塞点：当前纯领域步骤无阻塞。新 PowerShell 会话先执行 `. ./scripts/Use-Dotnet.ps1` 选择 SDK；后续需要基础设施时再启动并检查 Docker Desktop。
-- 已知限制：Quantity 仅表示正数，不含计量单位或单位换算；引用类型的 null 检查由后续使用方负责。Money、QuoteLine、Quote、业务 API、其他三个业务宿主、React 页面和服务间消息尚未实现；当前 API 健康检查不覆盖依赖。应用 Dockerfile 在 T09；React 在 T03。
+- 已知限制：Quantity 不含计量单位或换算；Money 仅支持 EUR，构造不舍入、允许负金额，最终行金额舍入与售价非负检查由后续 QuoteLine 负责；引用类型的 null 检查由使用方负责。QuoteLine、Quote、业务 API、持久化、其他三个业务宿主、React 页面和服务间消息尚未实现。应用 Dockerfile 在 T09；React 在 T03。
 
 ## 已完成准备
 
@@ -38,12 +38,15 @@
 
 - [ ] T02.1 实现 Quote、QuoteLine、Money、Quantity 及数量/金额约束，验证行金额与边界规则。
 - [x] T02.1a 最小步骤：实现 Quantity 正数值对象与独立领域测试；不接入 API、数据库或消息。
+- [x] T02.1b 实现 Money：金额/币种、值相等、显式舍入与边界测试；不提前限制所有金额的正负。
 - [ ] T02.2 实现创建项目/报价、添加/删除行、更新数量/售价及查询的 MediatR 用例和 REST API。
 - [ ] T02.3 接入 EF Core/PostgreSQL、迁移和报价版本；验证保存、重新读取、非法输入与并发冲突。
 
 验收：API 完成一次报价编辑流程，重启后能读取；领域规则测试和必要持久化检查通过。
 
 T02.1a 验证（2026-09-24）：`. ./scripts/Use-Dotnet.ps1` 后执行 `dotnet restore ConstructionBudgeting.sln --locked-mode`、`dotnet build ConstructionBudgeting.sln --no-restore`、`dotnet test ConstructionBudgeting.sln --no-build --no-restore`；还原通过，编译 0 警告/0 错误，领域 8/8、宿主 2/2。领域测试项目位于 `tests/Unit/ConstructionBudgeting.Sales.Domain.Tests`，仅引用 Domain；T02.1 整体仍未完成。
+
+T02.1b 验证（2026-09-24）：执行上述 SDK、locked-mode 还原、build、test 命令全部通过；编译 0 警告/0 错误，领域 26/26、宿主 2/2。`MoneyTests.cs` 新增 18 个案例，包括零/负数、非法币种、正负舍入中点、原值不变和值相等；1.005 单价 × 100 数量在最终舍入后为 100.50。未新增依赖或持久化，T02.1 整体仍未完成。
 
 ### T03 最小报价页面（第 3 天）
 
@@ -132,3 +135,4 @@ Kubernetes、云、CI/CD、鉴权、Redis、多实例、自动定价与完整端
 | 2026-09-18 | 上下文接续 | 新增 CONTEXT，记录小步推进、解释优先、CQRS 范围与排除项；AGENTS 设置接续入口，TODO 校正下一步；本次未改业务代码 | 先介绍已有 Sales 骨架和引用关系 |
 | 2026-09-19 | 架构分工约定 | 更新 docs/CONTEXT.md、docs/architecture-decisions.zh-CN.md、docs/implementation-plan.zh-CN.md、README.md 及本清单；记录 Sales Clean / Compositions 六边形的理由、边界、取舍和 T04.3 / T05 验收；git diff --check 通过，未运行应用测试，业务任务未勾选 | 先介绍 Sales 骨架，再进入 T02.1 的最小模型；Compositions 按后续顺序实现 |
 | 2026-09-24 | T02.1a / 六阶段总览 | 新增 Sales.Domain/Quotations/Quantity.cs 与 tests/Unit/ConstructionBudgeting.Sales.Domain.Tests，加入 solution 和锁文件；实施计划记录六阶段与 T02–T10 映射；更新架构理由及 README。locked-mode 还原通过，build 0 警告/0 错误，test 8 项领域 + 2 项宿主通过；未执行基础设施集成检查 | 先回顾 Quantity 实现，再解释并实现 Money；T02.1 保持未完成 |
+| 2026-09-24 | T02.1b | 新增 Sales.Domain/Quotations/Money.cs 与领域测试 MoneyTests.cs；更新架构理由及 README。locked-mode 还原通过，build 0 警告/0 错误，领域 26 + 宿主 2 项测试通过；未执行数据库/消息集成检查 | 回顾 Money，再讲解并实现最小 QuoteLine；不同时推进 Quote、API 或持久化 |
