@@ -1,11 +1,29 @@
 using ConstructionBudgeting.Sales.Application.Quotations;
 using ConstructionBudgeting.Sales.Domain.Quotations;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace ConstructionBudgeting.Sales.Infrastructure.Persistence;
 
 public sealed class EfQuoteRepository(IDbContextFactory<SalesDbContext> contextFactory) : IQuoteRepository
 {
+    public async Task AddAsync(Quote quote, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(quote);
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+        context.Quotes.Add(quote);
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception) when (exception.InnerException is PostgresException
+            { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: "IX_Quotes_ProjectId" })
+        {
+            // 由数据库唯一约束裁决重复创建，避免两个请求同时通过查询检查。
+            throw new QuoteAlreadyExistsException(quote.ProjectId, exception);
+        }
+    }
+
     // 按 ID 读取报价及全部报价行；找不到则返回 null。
     public async Task<Quote?> GetByIdAsync(Guid quoteId, CancellationToken cancellationToken)
     {

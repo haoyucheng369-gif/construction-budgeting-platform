@@ -229,6 +229,8 @@ public sealed class ChangeQuoteLineQuantityTests
     // 仅记录应用层与仓储的交互，不实现真实数据库或并发控制。
     private sealed class StubQuoteRepository(Quote? quote) : IQuoteRepository
     {
+        public Task AddAsync(Quote newQuote, CancellationToken cancellationToken) => throw new NotSupportedException();
+
         public int ReadCalls { get; private set; }
         public int SaveCalls { get; private set; }
         public Guid RequestedQuoteId { get; private set; }

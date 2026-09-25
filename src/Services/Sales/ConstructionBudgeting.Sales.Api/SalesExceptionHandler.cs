@@ -12,6 +12,7 @@ public sealed class SalesExceptionHandler(IProblemDetailsService problemDetails)
         // 已知业务错误转换为 HTTP 状态码，其他故障交给统一的 500 处理。
         var (status, title) = exception switch
         {
+            QuoteAlreadyExistsException => (StatusCodes.Status409Conflict, "该项目已存在报价"),
             QuoteConcurrencyException => (StatusCodes.Status409Conflict, "报价已变化，请重新查询后再修改"),
             KeyNotFoundException => (StatusCodes.Status404NotFound, "未找到报价或报价行"),
             BadHttpRequestException => (StatusCodes.Status400BadRequest, "请求格式无效"),

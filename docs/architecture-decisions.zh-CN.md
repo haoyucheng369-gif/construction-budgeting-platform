@@ -97,7 +97,7 @@ SignalR 采用单实例、项目分组；通知后定向重新查询。断线重
 
 本机原有 SDK 10.0.300 保留；8.0.425 单独安装在 `%LOCALAPPDATA%\Microsoft\dotnet`。`scripts/Use-Dotnet.ps1` 只为当前 PowerShell 会话设置 PATH / DOTNET_ROOT，不修改机器配置。NuGet 使用 packages.lock.json 和 locked-mode 还原。
 
-Sales 使用 Minimal API，绑定 `http://127.0.0.1:5080`，标准 ProblemDetails 错误响应；`/health` 目前仅表示宿主存活，不表示数据库/消息连接就绪。Domain 无外部包；Application 引用 Domain 与 MediatR；Infrastructure 引用 Application 并持有 EF Core/Npgsql；API 引用 Application 和 Infrastructure。应用层已提供 MediatR 注册并在测试中验证实际分发；Infrastructure 的 EF 映射/迁移已通过 PostgreSQL 测试，API 宿主尚未装配业务用例或数据库，MassTransit 尚未接入。
+Sales 使用 Minimal API，绑定 `http://127.0.0.1:5080`，标准 ProblemDetails 错误响应；`/health` 目前仅表示宿主存活，不表示数据库/消息连接就绪。Domain 无外部包；Application 引用 Domain 与 MediatR；Infrastructure 引用 Application 并持有 EF Core/Npgsql；API 引用 Application 和 Infrastructure。应用层已提供 MediatR 注册并在测试中验证实际分发；Infrastructure 的 EF 映射/迁移已通过 PostgreSQL 测试，API 宿主已装配报价用例、数据库与 Swagger，MassTransit 尚未接入。
 
 本次固定 MediatR 12.5.0，使用其 IRequest/IRequestHandler 与内置 DI 注册，满足当前 .NET 8 进程内用例需求，不将最新版升级作为前置工作；版本兼容性和注册方式已核对 [NuGet 包说明](https://www.nuget.org/packages/MediatR/12.5.0) 与 [对应版本源码说明](https://github.com/LuckyPennySoftware/MediatR/blob/v12.5.0/README.md)。应用测试沿用现有 xUnit/Test SDK，仅增加 8.0.1 的 DI 容器包。依赖图在各项目 packages.lock.json 中固定，并验证 locked-mode 还原。
 
@@ -158,7 +158,7 @@ Compositions 同时接收报价输入变化和资源价格变化，独立完成�
 
 ### Quote 的最小聚合入口
 
-Sales.Domain 的 `Quotations/Quote.cs` 以非空 Guid Id 标识报价，以非空 ProjectId 关联项目；创建时允许空行集合，总销售额为 0 EUR。它目前表示草稿报价，不增加审批/合同状态机，也不访问数据库校验项目存在性。单个聚合不能保证每项目仅一份草稿；该跨报价唯一性已由数据库 ProjectId 唯一索引约束，应用层错误转换随后实现。
+Sales.Domain 的 `Quotations/Quote.cs` 以非空 Guid Id 标识报价，以非空 ProjectId 关联项目；创建时允许空行集合，总销售额为 0 EUR。它目前表示草稿报价，不增加审批/合同状态机，也不访问数据库校验项目存在性。单个聚合不能保证每项目仅一份草稿；该跨报价唯一性已由数据库 ProjectId 唯一索引约束，创建用例已将该唯一冲突转换为应用异常及 HTTP 409。
 
 `AddLine(lineId, workItemCode, description, unit, quantity, salesUnitPrice)` 是添加的统一入口：先检查本报价内行 ID 重复，再在内部构造 QuoteLine，计算新总额，最后将行加入私有集合并更新总额。传入值对象可以安全复用，因为它们不可变；不接收外部构造的 QuoteLine，不把同一个行实例附加到多份报价。QuoteLine 的公开构造仍用于独立规则验证，构造并不等于加入报价。
 
@@ -250,7 +250,7 @@ MediatR 提供进程内用例分发入口，让 API 不依赖具体处理器；�
 
 `Sales.Application/Quotations/ChangeQuoteLineQuantity` 包含命令、处理器和结果 DTO。以刷漆 100 m² 改为 120 m² 为例，命令表达修改意图，携带 QuoteId、LineId、新数量和 ExpectedVersion；处理器负责取得报价、检查版本、调用领域行为、协调保存与返回结果。Quantity 校验、行金额、总额与版本递增仍由 Domain 负责，处理器不复制计算公式。
 
-`IQuoteRepository` 放在 Application，因为当前需求是应用用例取得/保存 Quote，领域模型本身不需要访问存储。接口仅有 GetByIdAsync 与 SaveAsync，不提前建立通用 CRUD 仓储或独立 UnitOfWork 抽象。Infrastructure 中的 EfQuoteRepository 实现接口，依赖方向保持向内。代价是需要维护接口契约和适配器测试，应用层替身验证与真实 PostgreSQL 验证分别覆盖协调与持久化。
+`IQuoteRepository` 放在 Application，因为当前需求是应用用例取得/保存 Quote，领域模型本身不需要访问存储。接口提供 GetByIdAsync、AddAsync 与 SaveAsync，不提前建立通用 CRUD 仓储或独立 UnitOfWork 抽象。Infrastructure 中的 EfQuoteRepository 实现接口，依赖方向保持向内。代价是需要维护接口契约和适配器测试，应用层替身验证与真实 PostgreSQL 验证分别覆盖协调与持久化。
 
 处理器在读取前拒绝空标识、非正版本，并通过 Quantity 构造函数验证数量；读取后检查请求版本是否等于报价当前版本，连同值请求也拒绝过期版本。找不到报价/行使用 KeyNotFoundException；版本不匹配使用应用层 QuoteConcurrencyException，携带报价标识和期望版本。未来 API 再把这些异常映射为 HTTP 响应，目前尚未实现错误映射。
 
@@ -302,7 +302,7 @@ Quantity 经值转换保存 decimal 数值，读回构造 Quantity；Money 保�
 
 保存顺序为：开始事务 → 按原版本更新报价总额/新版本 → 删除该报价旧行 → 按领域集合顺序插入当前行 → 提交。报价行沿用原 ID，金额直接复制领域结果；Position 属于持久化，仓储按集合下标维护。旧行先删除解决不可变行替换的 EF 身份冲突与行删除后 Position 唯一索引冲突。全部 SQL 在同一事务内执行，失败时释放事务并回滚，不留下新版本配旧行的状态。成功更新表头后数据库只在短暂保存事务内持有该行锁，不在用户打开页面或编辑期间持锁。
 
-读取与保存各通过 IDbContextFactory 创建并释放独立上下文，不混入其他操作的跟踪实体；加载使用 AsNoTracking 与 AsSingleQuery，有序地一次读取表头和行。SaveAsync 只保存已经存在且有效修改过的报价，要求领域 Version 高于原版本；创建用例另起步骤，API DI 已在 T02.2c 装配。相同输入由应用处理器跳过保存。失败的内存 Quote 不被自动回滚或重试，调用方应丢弃并重新加载。该边界也不支持跨聚合事务。
+读取与保存各通过 IDbContextFactory 创建并释放独立上下文，不混入其他操作的跟踪实体；加载使用 AsNoTracking 与 AsSingleQuery，有序地一次读取表头和行。SaveAsync 只保存已经存在且有效修改过的报价，要求领域 Version 高于原版本；创建用例通过 AddAsync 插入新报价，API DI 已装配。相同输入由应用处理器跳过保存。失败的内存 Quote 不被自动回滚或重试，调用方应丢弃并重新加载。该边界也不支持跨聚合事务。
 
 取舍：整份行快照替换实现简单，每次修改的写入量与报价行数成正比。本期小草稿、无独立行引用/历史表时采用；大型报价、行级并行编辑或外部行外键出现时，应评估差异更新或拆分聚合。整个报价仍共用一个版本，不悄悄改变此前约定。此步无领域规则、表结构、迁移或依赖版本变更。
 
@@ -312,11 +312,23 @@ Quantity 经值转换保存 decimal 数值，读回构造 Quantity；Money 保�
 
 用户需要通过页面实际调用已完成的用例，因此本步装配最小 GET/PATCH 与 Swagger UI。Program.cs 注册 MediatR、IDbContextFactory 和 IQuoteRepository，只将 URL/请求体转换为已有 Query/Command。金额由 Quote 计算，HTTP 不重复业务逻辑。ChangeQuantityRequest 只接收 quantity 与 expectedVersion，报价/行 ID 来自路径；返回已有 Result DTO。
 
-SalesExceptionHandler 把参数/输入溢出转为 400，缺失报价或行转为 404，QuoteConcurrencyException 转为 409；其他故障由统一 500 处理，不向调用方暴露数据库异常内容。同值请求仍先检查版本。此步验证已有业务用例的 HTTP 路径，未实现创建报价、增删行和改售价的 HTTP。
+SalesExceptionHandler 把参数/输入溢出转为 400，缺失报价或行转为 404，QuoteConcurrencyException 转为 409；其他故障由统一 500 处理，不向调用方暴露数据库异常内容。同值请求仍先检查版本。此步先验证查询/改数量的 HTTP 路径；创建报价、增删行和改售价在 T02.2d–T02.2g 补齐，见下节。
 
 Swagger 使用固定版本 Swashbuckle.AspNetCore 9.0.6，支持当前 .NET 8，不升级框架或现有 EF/MediatR。UI 与 OpenAPI 文档只在 Development 启用。参考 [ASP.NET Core 8 Swagger 指南](https://learn.microsoft.com/en-us/aspnet/core/tutorials/web-api-help-pages-using-swagger?view=aspnetcore-8.0) 与 [包版本依赖](https://www.nuget.org/packages/Swashbuckle.AspNetCore/9.0.6)。UI 展示接口，不能替代数据库并发控制；真实 HTTP 测试验证查询、数量保存、重读、非法输入和版本冲突。
 
 为便于手动操作，显式 Development 命令 --seed-sample 通过 SalesSampleData 应用迁移并创建固定 ID 的两行报价，金额由领域方法计算。重复执行保留已有数据，身份被其他报价占用时失败；正常启动不迁移、不写数据。该命令不提供可重置数据的 HTTP 入口，也不代表创建报价业务用例已经完成。指南见 [Swagger 操作步骤](sales-api-walkthrough.zh-CN.md)。
+
+### 补齐报价创建与行编辑（T02.2d–T02.2g）
+
+本批按用户要求一次补齐 Swagger 可操作的 Sales 报价功能：创建、查询、添加行、修改数量、修改销售单价、删除行。保留原领域规则，每个新增操作通过独立 Command/Handler/Result 接入；路由移到 QuoteEndpoints，Program 负责装配。没有引入通用 CRUD 基类、新框架、表结构或消息功能。
+
+创建命令接收非空 ProjectId，服务器生成报价 ID，创建版本 1、零金额、空行集合。当前 ProjectId 只作为外部项目关联标识，不假定项目真实存在，也不以“是否有预算”代替项目存在性；项目目录仍待实现。IQuoteRepository 增加 AddAsync，由 EF 插入聚合。每项目一份报价依赖已存在的 IX_Quotes_ProjectId 唯一索引；仅该索引的唯一冲突转换成 QuoteAlreadyExistsException/HTTP 409，其他存储错误继续传播。不能只先查再插，因为两个请求可能同时通过查询。
+
+添加行由服务器生成行 ID，经 Quote.AddLine 校验字段并计算；删除与改价沿用 RemoveLine、ChangeLineSalesUnitPrice。所有已有报价修改都携带 ExpectedVersion，保存原版本检查沿用 EfQuoteRepository；相同售价跳过保存，但仍先拒绝过期版本。售价 0 合法，负数非法；HTTP 必须显式提供 salesUnitPrice，防止字段遗漏被当成零价。删除版本从查询参数传入，成功返回新总额/版本；允许删到空报价。
+
+创建报价与添加行返回 201，Location 指向完整报价查询；其他编辑返回 200。Swagger OperationFilter 预填示例路径和请求体，代码中的示例不成为服务器默认值。编辑示例以初始报价版本 3 为基础，成功修改后用户必须换成最新版本；新建报价/行的 ID 需复制到后续表单，避免假装 Swagger 自动串联流程或自动绕过并发控制。
+
+真实 HTTP/数据库验收覆盖创建→添加两行→改价→改量→删除到空→再次添加→新宿主读回；同一项目两个创建请求只有一个成功，两次同版本添加只有一个成功；字段遗漏、非法输入、数据缺失与过期版本不写入部分状态。Swagger 文档校验六个操作与示例值。代码注释保持简短中文，详细操作见手动指南。
 
 ### 为什么跨服务采用事件以及代价
 
@@ -372,3 +384,5 @@ Docker Compose 满足本期的本地服务编排需求。Kubernetes、云与鉴�
 | 2026-09-25 | EfQuoteRepository 以独立上下文读取，通过版本条件 UPDATE 与行快照替换事务保存 | 真实数据库验证竞争只有一个写者成功、故障全部回滚；保留领域计算及聚合级并发，整份重写适用于本期小草稿；API 装配后续实现 |
 
 | 2026-09-25 | T02.2c 装配 GET/PATCH、Swagger 与统一 400/404/409 响应，增加显式示例初始化 | HTTP 复用已有领域/用例/仓储；示例重复初始化保留修改；Swashbuckle 固定 9.0.6；Windows PowerShell 5.1 脚本编码统一 UTF-8 BOM |
+
+| 2026-09-25 | T02.2d–T02.2g 补齐六个报价操作及 Swagger 示例 | 复用领域计算/聚合版本；数据库唯一索引裁决重复创建，项目 ID 暂为外部引用；不扩展项目管理或其他服务，不增加依赖和迁移 |

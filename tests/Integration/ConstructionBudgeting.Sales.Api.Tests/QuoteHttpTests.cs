@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ConstructionBudgeting.Sales.Api.Tests;
 
-public sealed class QuoteHttpTests
+public sealed partial class QuoteHttpTests
 {
     [Fact]
     public async Task Swagger_describes_query_and_quantity_edit_in_development()
@@ -25,6 +25,19 @@ public sealed class QuoteHttpTests
         var edit = paths.GetProperty("/quotes/{quoteId}/lines/{lineId}/quantity").GetProperty("patch");
         Assert.True(edit.GetProperty("responses").TryGetProperty("409", out _));
         Assert.True(edit.TryGetProperty("requestBody", out _));
+        Assert.Equal("22222222-2222-2222-2222-222222222222", paths.GetProperty("/quotes/{id}")
+            .GetProperty("get").GetProperty("parameters")[0].GetProperty("schema").GetProperty("default").GetString());
+        Assert.Equal(120, edit.GetProperty("requestBody").GetProperty("content").GetProperty("application/json")
+            .GetProperty("example").GetProperty("quantity").GetInt32());
+        Assert.Equal("55555555-5555-5555-5555-555555555555", paths.GetProperty("/quotes").GetProperty("post")
+            .GetProperty("requestBody").GetProperty("content").GetProperty("application/json")
+            .GetProperty("example").GetProperty("projectId").GetString());
+        Assert.True(paths.GetProperty("/quotes/{quoteId}/lines").GetProperty("post")
+            .GetProperty("responses").TryGetProperty("201", out _));
+        Assert.True(paths.GetProperty("/quotes/{quoteId}/lines/{lineId}/sales-unit-price").TryGetProperty("patch", out _));
+        var delete = paths.GetProperty("/quotes/{quoteId}/lines/{lineId}").GetProperty("delete");
+        Assert.Contains(delete.GetProperty("parameters").EnumerateArray(), parameter =>
+            parameter.GetProperty("name").GetString() == "expectedVersion" && parameter.GetProperty("required").GetBoolean());
     }
 
     [Fact]

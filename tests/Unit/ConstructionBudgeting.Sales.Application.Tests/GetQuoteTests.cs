@@ -184,6 +184,8 @@ public sealed class GetQuoteTests
     // 使用传入的聚合记录仓储调用，不模拟数据库持久化行为。
     private sealed class StubQuoteRepository(Quote? quote) : IQuoteRepository
     {
+        public Task AddAsync(Quote newQuote, CancellationToken cancellationToken) => throw new NotSupportedException();
+
         public int ReadCalls { get; private set; }
         public int SaveCalls { get; private set; }
         public Guid RequestedQuoteId { get; private set; }

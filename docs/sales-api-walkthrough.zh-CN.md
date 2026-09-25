@@ -1,6 +1,21 @@
-# 报价查询与工程量修改
+# 报价创建与编辑
 
-Sales 提供两个接口：查询完整报价、修改一行工程量。Swagger UI 是调用这两个接口的网页，返回值来自 PostgreSQL。
+Sales 提供六个操作：创建报价、查询报价、添加行、修改数量、修改销售单价、删除行。Swagger UI 已预填示例 ID 和请求体，返回值来自 PostgreSQL。
+
+## 预填参数怎么用
+
+点击 **Try it out** 后，GET 和编辑接口会预填示例报价 `22222222-2222-2222-2222-222222222222`。改数量/售价默认选择墙面涂装行，删除默认选择地板行。请求体已填好数量、单价、工程项和版本 3。
+
+默认值只是 Swagger 表单示例，不是服务器自动补参数。首次初始化后可直接执行；每次成功修改后，使用响应或 GET 中的最新 `version` 替换下一次请求的 `expectedVersion`。保留旧版本会得到 409，这是正常的并发保护。已删除的行要换成仍存在的 `lineId`。
+
+| 操作 | 路径 | 成功响应 |
+| --- | --- | --- |
+| 创建空报价 | POST /quotes | 201，返回报价 ID、版本 1、零总额及 Location |
+| 查询报价 | GET /quotes/{id} | 200，包含全部报价行和当前版本 |
+| 添加行 | POST /quotes/{quoteId}/lines | 201，返回新行 ID、新总额和新版本 |
+| 修改数量 | PATCH /quotes/{quoteId}/lines/{lineId}/quantity | 200，返回最新金额和版本 |
+| 修改售价 | PATCH /quotes/{quoteId}/lines/{lineId}/sales-unit-price | 200，返回最新金额和版本 |
+| 删除行 | DELETE /quotes/{quoteId}/lines/{lineId}?expectedVersion=... | 200，返回剩余总额和新版本 |
 
 ## 启动
 
@@ -92,4 +107,21 @@ Swagger → Program.cs 的 GET/PATCH
 
 PATCH 在处理器内调用 `Quote.ChangeLineQuantity` 完成计算，再保存。HTTP 请求体 `ChangeQuantityRequest` 只有数量和原版本，报价和行 ID 来自 URL；不接受客户端传入计算金额。
 
-当前尚无创建报价、添加/删除行、修改售价的 HTTP 接口，示例初始化也不等于创建报价业务用例。这些按后续小步骤实现。
+## 从零创建一份报价
+
+1. 在 **POST /quotes** 执行预填的项目 ID `55555555-5555-5555-5555-555555555555`。成功后复制返回的 `quoteId`，初始 `version` 为 1。
+2. 在 **POST /quotes/{quoteId}/lines** 把路径的默认报价 ID 换成刚返回的 ID，将默认请求体中的 `expectedVersion` 改为 1，其余示例值可直接保留。数量 10、售价 20，行金额和总额均为 200，版本变成 2。复制返回的 `lineId`。
+3. 在 **PATCH .../sales-unit-price** 填入该报价和行 ID，保留示例售价 22，将 `expectedVersion` 改为 2。总额变成 220，版本为 3。
+4. 在 **PATCH .../quantity** 使用该报价和行 ID，数量 120、`expectedVersion` 为 3。总额变成 2640，版本为 4。
+5. 在 **DELETE .../lines/{lineId}** 使用同一报价和行 ID，查询参数 `expectedVersion` 填 4。总额变成 0，版本为 5；再次 GET 可以看到空的 `lines`。之后仍可继续添加新行。
+
+新报价和行的 ID 由服务器生成，不会自动替换 Swagger 其他表单中的预填 ID，所以从零操作时需要复制到对应位置。POST /quotes 同一个项目只能成功一次，重复提交返回 409；需要另一份报价时换一个新项目 ID。在 PowerShell 中执行 `[guid]::NewGuid()` 可生成一个新 ID。
+
+创建报价目前只要求项目 ID 非空，并保证每个项目最多一份报价；尚未接入项目目录验证其存在性，也不创建项目或预算。预算/成本联动属于后续服务。
+
+## 添加行、修改售价和删除的输入边界
+
+- 添加行需要工程项代码、说明、单位、正数量、非负销售单价与最新版本。`salesUnitPrice` 必须显式提供，省略不会自动变成免费行。
+- 单价可填 0，但不能为负数；1.005 这样的精细单价会保留，乘以数量后才舍入行金额。相同单价提交不改变版本。
+- 删除必须在查询参数提供版本；不存在的行返回 404，旧版本返回 409。删除最后一行后保留空报价。
+- 工程项代码与单位当前只校验非空，尚未接入 Library/Compositions 检查代码和单位是否匹配。

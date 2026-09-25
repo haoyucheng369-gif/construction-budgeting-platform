@@ -4,6 +4,9 @@ namespace ConstructionBudgeting.Sales.Application.Quotations;
 
 public interface IQuoteRepository
 {
+    // 创建新报价；同一项目已有报价时抛出 QuoteAlreadyExistsException。
+    Task AddAsync(Quote quote, CancellationToken cancellationToken);
+
     /// <summary>
     /// 为本次业务操作加载报价；不存在时返回 null。
     /// 实现时不能让并发请求共享同一个可变的聚合对象。

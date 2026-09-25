@@ -6,21 +6,21 @@
 
 - 最近更新：2026-09-25。
 - 当前阶段：**T01、T02.1 已完成，T02 整体未完成**；六大阶段总览见 [实施计划](implementation-plan.zh-CN.md)。
-- 当前代码任务：**T02.2c 已完成并验证**；T02.3c 与中文注释已推送（3d957c5）。按用户要求接入查询/修改数量 HTTP、Swagger UI、显式示例初始化，并修复 Windows PowerShell 5.1 中文脚本编码问题。
+- 当前代码任务：**T02.2d–T02.2g 已完成并验证**；T02.2c 已推送（981e837）。按本次授权补齐创建报价、添加行、删除行、修改售价，Swagger 六个操作均提供示例参数；项目目录仍未实现，T02.2 整体保持未完成。
 - 当前说明整理：按用户反馈，将 EfQuoteRepository 的长注释精简为 6 条短中文说明；CONTEXT 记录“源码少量短注释，详细原理在对话中解释”的偏好。已核对非注释内容不变，仅修改注释和文档，未重跑测试；该整理已包含在 3d957c5。
 - 本次整理：现有源码、测试、脚本及配置示例中的英文说明注释已统一翻译为中文。保留 XML 注释标签、自动生成标记及脚本解释器声明；对 48 个源码/脚本/配置文件核对非注释内容，修改前后一致，`git diff --check` 通过。此注释批次已包含在 3d957c5；随后 HTTP 验收发现并修复 PowerShell 中文编码问题，见本次验证。
 - 实施约定：按 [CONTEXT.md](CONTEXT.md) 每次只推进一小步，先讲设计再实现；讨论问题时不自动写业务代码；理由记录在架构决策第 8 节。
 - 架构约定：Sales 保留 Clean 四层；Compositions 在 T04.3 / T05 明确采用六边形端口与适配器，并与 Sales 对照说明；Library、Budget 延续简单分层。六大阶段写入实施计划，完成状态只在本清单维护。
-- 本次验证（2026-09-25，HTTP/Swagger）：./scripts/Test-SalesPersistence.ps1 的 locked-mode 还原/build/test 通过，0 警告/0 错误，154 项通过、无跳过（领域 108、应用 27、持久化 12、API 7；共 14 项真实 PostgreSQL）。最初因 Windows PowerShell 5.1 误读无 BOM 中文脚本导致连接缺失密码，修正 scripts/*.ps1 为 UTF-8 BOM 后重跑通过。示例初始化连续两次成功，未覆盖数据；实际 Kestrel 的 /health、/swagger/index.html、Swagger JSON、报价 GET 均返回 200，同值 PATCH 保持版本、旧版本 PATCH 返回 409。浏览器自动化不可用，未代点击 Swagger UI；页面 HTML 与接口已通过 HTTP 验证。
+- 本次验证（2026-09-25，完整报价接口）：./scripts/Test-SalesPersistence.ps1 的 locked-mode 还原/build/test 通过，0 警告/0 错误，160 项通过、无跳过（领域 108、应用 27、持久化 12、API 13；共 20 项真实 PostgreSQL）。新增完整创建/增删/改价/改量/新宿主读取流程、并发创建唯一性、并发添加只保留一行、零价与精度、缺失售价/其他非法输入和过期版本保护。Swagger 文档中的六个操作、请求体与参数示例均检查通过；实际宿主 /swagger/index.html 返回 200，GET 读到现有示例版本 3、总额 2049.98。未代点击浏览器 UI，未验证其他服务/消息。
 - 历史验证（2026-09-18）：实际 HTTP `/health` 返回 200 Healthy；三个容器健康；PostgreSQL Sales schema 可读写且隔离；SQL Server 基准可读且 UPDATE 被拒绝；RabbitMQ 管理接口认证成功；预算初始化可重复执行。2026-09-24 会话中只读检查 `docker compose ps -a` 时 Docker Linux 引擎不可连接；历史健康状态不代表当前可用。
-- 下一步：先让用户按 docs/sales-api-walkthrough.zh-CN.md 在 Swagger 执行 GET → PATCH → GET，并观察 pgAdmin。下一业务任务 T02.2d：解释并实现创建报价的最小用例与 HTTP 入口；创建时项目存在性如何验证需单独明确，不能把示例初始化当成已完成创建项目功能。其余行编辑、前端和消息继续拆步。
+- 下一步：先通过 Swagger 回顾完整流程，重点解释创建报价与修改已有报价两条路径；用户刷新 Swagger，按 docs/sales-api-walkthrough.zh-CN.md 验证六个报价操作；本期报价基础编辑接口已齐。剩余 T02.2h 是最小项目目录/存在性校验边界，需要先讲清再实现，随后进入 T03 React 页面。Library/Compositions/Budget、事件及 SignalR 尚未开始，本批没有自动推进。
 - 当前本机运行：Sales 开发宿主本次已启动在 http://127.0.0.1:5080，Swagger 在 /swagger；示例报价 22222222-2222-2222-2222-222222222222，油漆行 33333333-3333-3333-3333-333333333333。交接时油漆数量 100、总额 2049.98、版本 3；用户操作后以 GET 为准。接续时重新检查进程，完整启动命令见手动指南。
 - 环境：Windows；SDK 8.0.425 / 运行时 8.0.31 已在用户目录单独安装；原 SDK 10.0.300 保留；Node 22.22.0、npm 10.9.4；Docker 29.1.3、Compose 2.40.3。
 - 本机数据库查看工具：用户已安装 Windows 桌面版 pgAdmin，连接 `127.0.0.1:5432`、数据库 `vente`、账号 `sales_app`，密码取本机 `.env`。按用户要求已删除旧网页工具容器 `construction-pgadmin`、专属设置卷 `construction-pgadmin-data` 和镜像 `dpage/pgadmin4:9.18`；不再使用 5050 网页入口。项目 PostgreSQL 及其 `construction-budgeting_postgres-data` 数据卷保留，已启动并验证 healthy、主机 5432 端口可达、sales_app TCP 登录及三张 sales 表存在。用户随后提供的截图已显示桌面 pgAdmin 连接 vente，并执行 Quotes 查询返回列结构；原网页工具宿主机配置目录仍保留但不再使用。
 - 本机凭据交接（2026-09-25）：用户修改 `.env` 后，已通过 ALTER ROLE 同步 PostgreSQL 五个账号，保留原数据卷，重新应用 PostgreSQL 容器配置并同步 pgAdmin 的宿主机密码文件及卷内 `.pgpass`。五账号 TCP 登录、pgAdmin 保存凭据查询 sales 表和 HTTP 200 均通过。SQL Server/RabbitMQ 仍停止，尚未同步其实际账号密码；当前 `.env` 的 SQL Server 管理员密码不满足复杂度要求，启用这两项服务前须单独处理，不能仅重启或假定所有凭据已同步。文档不记录密码值。
 - 桌面 pgAdmin 9.18 连接兼容性：用户遇到空指针 access violation，与上游 Windows GSSAPI 打包问题 #10428 相符。使用安装包自带 Python/psycopg，加入运行库查找路径后，以 `gssencmode=disable` 连接主机 `127.0.0.1:5432/vente`，查询返回 `sales_app / vente`，进程退出码 0。已提供在 GUI 的 Connection Parameters 中添加 `GSS encmode = disable` 的办法；用户后续截图显示界面连接与 Quotes 查询成功，不改数据库认证或 SSL 配置。
 - 阻塞点：当前无阻塞；本次 PostgreSQL 容器 healthy，监听 127.0.0.1:5432，其他两个容器仍停止。接续时重新检查状态。新会话执行 `. ./scripts/Use-Dotnet.ps1`；EF CLI 前另执行 `. ./scripts/Use-SalesDatabase.ps1`，密码不写入文档。
-- 已知限制：EfQuoteRepository 的每次读写使用独立上下文，保存仅支持已有且有效修改的单份报价，整份行快照在事务内替换，写入量与行数成正比；大报价、外部行引用及多聚合事务需重新评估。并发仍以整份报价为单位，失败后须丢弃内存聚合。每项目一份报价的数据库唯一约束已验证，项目存在性/配方单位匹配仍未验证。numeric 保留 decimal 精度，任意外部 SQL 写入的超范围/不一致数据不受完整领域保护。已装配 API DI 并提供报价 GET/数量 PATCH；创建报价、添加/删除行、改售价的 HTTP、其他三个宿主、React 与消息尚未实现。示例初始化是显式本地命令，不是完整创建用例；应用 Dockerfile 在 T09。
+- 已知限制：仓储按整份报价版本控制，SaveAsync 在事务内替换行快照，AddAsync 通过数据库项目唯一索引保证不重复创建；大报价、外部行引用及多聚合事务需重新评估。ProjectId 当前只要求非空且每项目一份报价，不验证项目存在性；工程项代码和单位尚未匹配配方目录。Swagger 默认参数是静态初始示例，保存后须更新 expectedVersion，新创建 ID 要复制到其他表单。SQL 手工写入仍可绕过领域规则；其他三个宿主、React、消息和 SignalR 尚未实现。
 
 ## 已完成准备
 
@@ -54,7 +54,11 @@
 - [x] T02.2a 实现修改数量的 MediatR 命令/处理器与最小仓储契约，使用测试替身验证应用协调；API 与数据库适配器后续实现。
 - [x] T02.2b 实现 GetQuoteQuery/Handler 与只读结果 DTO；验证查询不修改状态或保存，暂不接 HTTP/数据库。
 - [x] T02.2c 装配 API 应用/数据库依赖，提供报价 GET 与数量 PATCH（用户本次明确扩展）、Swagger UI 及显式示例初始化；验证真实数据、400/404/409、健康检查与初始化可重复执行。
-- [ ] T02.2d 实现最小创建报价用例与 HTTP 入口，明确项目存在性校验边界；添加行与其他编辑接口继续拆小步。
+- [x] T02.2d 实现创建报价用例与 HTTP；项目 ID 作为非空外部关联，项目目录暂不验证；数据库保证每项目一份报价，并发重复创建返回 409。
+- [x] T02.2e 实现添加报价行用例与 HTTP，服务器生成行 ID，沿用领域计算和原版本保存。
+- [x] T02.2f 实现删除报价行用例与 HTTP，返回新版本/总额，允许删除最后一行。
+- [x] T02.2g 实现修改销售单价用例与 HTTP，支持零价、同值不保存及版本冲突。
+- [ ] T02.2h 明确并补齐最小项目目录（创建/选择）与报价关联校验；当前不宣称完成创建项目功能。
 - [x] T02.3 接入 EF Core/PostgreSQL、迁移和报价版本；验证保存、重新读取、非法输入与并发冲突。
 - [x] T02.3a 先实现 Quote.Version 的内存变化规则：有效输入变化递增，同值无操作和失败不递增；数据库原子比较与冲突响应随后接入。
 - [x] T02.3b 实现最小 SalesDbContext、聚合映射与初始迁移；验证 PostgreSQL 保存后在新上下文读回身份、顺序、值对象、金额及版本。仓储适配器和并发保存另起小步。
@@ -193,3 +197,7 @@ Kubernetes、云、CI/CD、鉴权、Redis、多实例、自动定价与完整端
 | 2026-09-25 | T02.2c | 推送 T02.3c（3d957c5）；Program.cs 装配 MediatR/EF 仓储与 GET/PATCH，新增 ChangeQuantityRequest、SalesExceptionHandler、SalesSampleData、QuoteHttpTests；固定 Swashbuckle.AspNetCore 9.0.6 及锁文件。修复 .ps1 为 UTF-8 BOM 并添加 .editorconfig。Test-SalesPersistence.ps1 重跑 154 项全通过；CLI --seed-sample 两次成功；实际 HTTP 200/409 和同值保存验证通过。新增手动操作指南；未代点击 UI；提交内容包含 API、Swagger、操作指南与脚本编码修复 | 用户手动验证后，T02.2d 最小创建报价用例 |
 
 | 2026-09-25 | T02.2c 交付整理 | 按用户请求准备提交并推送本批改动；沿用已通过的 154 项测试及 HTTP 验收，业务代码未再修改，git diff --check 通过；实际提交和推送结果以 Git 记录为准 | 下一步 T02.2d：创建报价用例与 HTTP，先解释项目关联和重复报价约束 |
+
+| 2026-09-25 | T02.2d–T02.2g | 新增四组 Command/Handler/Result，仓储 AddAsync 与项目重复异常；QuoteEndpoints 集中六个路由，Swagger/SalesExamplesOperationFilter 预填参数。新增 QuoteEditingHttpTests，完整流程与竞争保存验证通过；Test-SalesPersistence.ps1 全套 160 项通过，编译 0 警告/0 错误，无新依赖/迁移。已重启本机 API，Swagger 返回 200、六个操作与示例可读；未代点击 UI；更新操作指南/架构/README，未提交 | 用户手动操作后，讨论最小项目目录与 React 项目选择 |
+
+| 2026-09-25 | T02.2d–T02.2g 交付整理 | 按用户请求准备提交并推送报价接口、Swagger 预填示例与文档；沿用已通过的 160 项测试，业务代码未再修改，git diff --check 通过；实际推送结果以 Git 为准 | 先回顾创建与编辑两条路径，不自动继续新增功能 |
