@@ -6,15 +6,15 @@
 
 - 最近更新：2026-09-24。
 - 当前阶段：**T01 已完成，T02.1 进行中**；六大阶段总览见 [实施计划](implementation-plan.zh-CN.md)。
-- 当前代码任务：**T02.1 部分完成，T02.1a / T02.1b 已完成**：Quantity 与 Money 值对象及测试。下一小步为 QuoteLine，尚未实现。
+- 当前代码任务：**T02.1 部分完成，T02.1a / T02.1b / T02.1c 已完成**：Quantity、Money 和最小 QuoteLine 及测试。下一小步为 Quote 聚合，尚未实现。
 - 实施约定：按 [CONTEXT.md](CONTEXT.md) 每次只推进一小步，先讲设计再实现；讨论问题时不自动写业务代码；理由记录在架构决策第 8 节。
 - 架构约定：Sales 保留 Clean 四层；Compositions 在 T04.3 / T05 明确采用六边形端口与适配器，并与 Sales 对照说明；Library、Budget 延续简单分层。六大阶段写入实施计划，完成状态只在本清单维护。
-- 本次验证（2026-09-24，Money）：locked-mode 还原通过；编译 0 警告/0 错误；26 项领域测试（Quantity 8 + Money 18）与原有 2 项宿主集成测试全部通过。未运行数据库/消息集成检查，未启动 Docker 或独立 API 进程。
+- 本次验证（2026-09-24，QuoteLine）：locked-mode 还原通过；编译 0 警告/0 错误；43 项领域测试（Quantity 8 + Money 18 + QuoteLine 17）与原有 2 项宿主集成测试全部通过。未运行数据库/消息集成检查，未启动 Docker 或独立 API 进程。
 - 历史验证（2026-09-18）：实际 HTTP `/health` 返回 200 Healthy；三个容器健康；PostgreSQL Sales schema 可读写且隔离；SQL Server 基准可读且 UPDATE 被拒绝；RabbitMQ 管理接口认证成功；预算初始化可重复执行。2026-09-24 会话中只读检查 `docker compose ps -a` 时 Docker Linux 引擎不可连接；历史健康状态不代表当前可用。
-- 下一步：先回顾 `src/Services/Sales/ConstructionBudgeting.Sales.Domain/Quotations/Money.cs` 与测试，解释金额精度、显式舍入、负金额和售价约束的区别；随后讲解并实现一个最小 QuoteLine，将工程项/单位、Quantity、销售单价 Money 与行金额关联，拒绝负售价及空值。明确报价行的身份与修改最终由 Quote 控制，不同时完成 Quote、API 或持久化。关联预算的预置项目标识为 `11111111-1111-1111-1111-111111111111`。
+- 下一步：先回顾 `src/Services/Sales/ConstructionBudgeting.Sales.Domain/Quotations/QuoteLine.cs`，解释实体身份、值对象组合及先乘后舍入；再讲解 Quote 聚合并先实现创建报价、受控添加行及汇总已舍入行金额这一小段，校验行身份唯一性与归属边界。后续再增加改数量/售价、删除与版本；不同时完成 API、数据库或消息。关联预算的预置项目标识为 `11111111-1111-1111-1111-111111111111`。
 - 环境：Windows；SDK 8.0.425 / 运行时 8.0.31 已在用户目录单独安装；原 SDK 10.0.300 保留；Node 22.22.0、npm 10.9.4；Docker 29.1.3、Compose 2.40.3。
 - 阻塞点：当前纯领域步骤无阻塞。新 PowerShell 会话先执行 `. ./scripts/Use-Dotnet.ps1` 选择 SDK；后续需要基础设施时再启动并检查 Docker Desktop。
-- 已知限制：Quantity 不含计量单位或换算；Money 仅支持 EUR，构造不舍入、允许负金额，最终行金额舍入与售价非负检查由后续 QuoteLine 负责；引用类型的 null 检查由使用方负责。QuoteLine、Quote、业务 API、持久化、其他三个业务宿主、React 页面和服务间消息尚未实现。应用 Dockerfile 在 T09；React 在 T03。
+- 已知限制：QuoteLine 目前只有构造和只读属性，无修改操作；工程项代码、描述和单位仅做非空/去首尾空白检查，尚未接入预置配方来校验单位匹配。Quote 归属、行 ID 唯一性与总额尚未实现。Money 仅支持 EUR，decimal 溢出抛出异常，数据库精度及 API 错误映射后续确定。业务 API、持久化、其他三个宿主、React 页面和服务间消息尚未实现。应用 Dockerfile 在 T09；React 在 T03。
 
 ## 已完成准备
 
@@ -39,6 +39,7 @@
 - [ ] T02.1 实现 Quote、QuoteLine、Money、Quantity 及数量/金额约束，验证行金额与边界规则。
 - [x] T02.1a 最小步骤：实现 Quantity 正数值对象与独立领域测试；不接入 API、数据库或消息。
 - [x] T02.1b 实现 Money：金额/币种、值相等、显式舍入与边界测试；不提前限制所有金额的正负。
+- [x] T02.1c 实现最小 QuoteLine：行身份、工程项/单位、数量、非负售价、行金额及边界测试；修改入口留到 Quote 聚合。
 - [ ] T02.2 实现创建项目/报价、添加/删除行、更新数量/售价及查询的 MediatR 用例和 REST API。
 - [ ] T02.3 接入 EF Core/PostgreSQL、迁移和报价版本；验证保存、重新读取、非法输入与并发冲突。
 
@@ -47,6 +48,8 @@
 T02.1a 验证（2026-09-24）：`. ./scripts/Use-Dotnet.ps1` 后执行 `dotnet restore ConstructionBudgeting.sln --locked-mode`、`dotnet build ConstructionBudgeting.sln --no-restore`、`dotnet test ConstructionBudgeting.sln --no-build --no-restore`；还原通过，编译 0 警告/0 错误，领域 8/8、宿主 2/2。领域测试项目位于 `tests/Unit/ConstructionBudgeting.Sales.Domain.Tests`，仅引用 Domain；T02.1 整体仍未完成。
 
 T02.1b 验证（2026-09-24）：执行上述 SDK、locked-mode 还原、build、test 命令全部通过；编译 0 警告/0 错误，领域 26/26、宿主 2/2。`MoneyTests.cs` 新增 18 个案例，包括零/负数、非法币种、正负舍入中点、原值不变和值相等；1.005 单价 × 100 数量在最终舍入后为 100.50。未新增依赖或持久化，T02.1 整体仍未完成。
+
+T02.1c 验证（2026-09-24）：`. ./scripts/Use-Dotnet.ps1` 后执行 `dotnet restore ConstructionBudgeting.sln --locked-mode`、`dotnet build ConstructionBudgeting.sln --no-restore`、`dotnet test ConstructionBudgeting.sln --no-build --no-restore` 全部通过；编译 0 警告/0 错误，领域 43/43、宿主 2/2。新增 `QuoteLineTests.cs` 17 个案例，覆盖 100 × 20 = 2000、12.5 × 19.99 = 249.88、零售价、负售价、空身份/字段/值对象及溢出。未新增包或基础设施，T02.1 整体仍未完成。
 
 ### T03 最小报价页面（第 3 天）
 
@@ -136,3 +139,4 @@ Kubernetes、云、CI/CD、鉴权、Redis、多实例、自动定价与完整端
 | 2026-09-19 | 架构分工约定 | 更新 docs/CONTEXT.md、docs/architecture-decisions.zh-CN.md、docs/implementation-plan.zh-CN.md、README.md 及本清单；记录 Sales Clean / Compositions 六边形的理由、边界、取舍和 T04.3 / T05 验收；git diff --check 通过，未运行应用测试，业务任务未勾选 | 先介绍 Sales 骨架，再进入 T02.1 的最小模型；Compositions 按后续顺序实现 |
 | 2026-09-24 | T02.1a / 六阶段总览 | 新增 Sales.Domain/Quotations/Quantity.cs 与 tests/Unit/ConstructionBudgeting.Sales.Domain.Tests，加入 solution 和锁文件；实施计划记录六阶段与 T02–T10 映射；更新架构理由及 README。locked-mode 还原通过，build 0 警告/0 错误，test 8 项领域 + 2 项宿主通过；未执行基础设施集成检查 | 先回顾 Quantity 实现，再解释并实现 Money；T02.1 保持未完成 |
 | 2026-09-24 | T02.1b | 新增 Sales.Domain/Quotations/Money.cs 与领域测试 MoneyTests.cs；更新架构理由及 README。locked-mode 还原通过，build 0 警告/0 错误，领域 26 + 宿主 2 项测试通过；未执行数据库/消息集成检查 | 回顾 Money，再讲解并实现最小 QuoteLine；不同时推进 Quote、API 或持久化 |
+| 2026-09-24 | T02.1c | 新增 Sales.Domain/Quotations/QuoteLine.cs 与领域测试 QuoteLineTests.cs；更新架构理由及 README。locked-mode 还原通过，build 0 警告/0 错误，领域 43 + 宿主 2 项测试通过；未执行数据库/消息集成检查 | 回顾 QuoteLine，再讲解 Quote 聚合，先做创建/添加行/汇总；暂不推进 API 或持久化 |
