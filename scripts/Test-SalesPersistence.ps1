@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 $salesPreviousConnection = $env:ConnectionStrings__Sales
 $salesPreviousTestFlag = $env:SALES_PERSISTENCE_TESTS
 Push-Location (Split-Path -Parent $PSScriptRoot)

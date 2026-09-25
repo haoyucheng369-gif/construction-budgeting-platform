@@ -204,7 +204,7 @@ Quote 暴露只读的 `long Version`，新空草稿从 1 开始，内部私有 s
 
 四个编辑入口都先完成校验、金额计算及 `checked(Version + 1)`，然后更新集合、金额和版本。checked 防止 long 到达上限后回绕，版本计算失败在状态修改之前发生。版本由整份报价拥有，不同报价各自递增；这是输入一致性的边界，代价是未来两人修改不同报价行也可能产生整份报价的版本冲突。
 
-当前输入版本已映射为 PostgreSQL bigint，保存及读回保留领域版本；EF 配置标记为并发令牌。EfQuoteRepository 以读取时的版本作为 SQL 更新条件，在事务内保存完整聚合；单纯 Version++ 或应用层先查询再比较都不能阻止并发覆盖。读回不重放 AddLine，不意外递增。API/消息版本序列化契约及 HTTP 冲突响应尚未实现。
+当前输入版本已映射为 PostgreSQL bigint，保存及读回保留领域版本；EF 配置标记为并发令牌。EfQuoteRepository 以读取时的版本作为 SQL 更新条件，在事务内保存完整聚合；单纯 Version++ 或应用层先查询再比较都不能阻止并发覆盖。读回不重放 AddLine，不意外递增。HTTP 数量修改已携带 expectedVersion，并将版本冲突映射为 409；消息版本契约尚未实现。
 
 未来 QuoteInputsChanged 的 QuoteVersion 对应此输入版本。资源成本变化、收到成本/预算计算结果不会递增报价输入版本；这些结果按来源版本与 CompositionRevision 判断新旧，避免输入事件循环。上述跨服务路径尚未实现。当前测试覆盖初始值、四个操作递增、同值/失败不变、金额不变但输入变化、改回原值、删除到空及报价间独立。
 
@@ -260,7 +260,7 @@ MediatR 提供进程内用例分发入口，让 API 不依赖具体处理器；�
 
 命令结果只包含报价/行标识、数量、行金额、总销售额、币种和版本这些只读标量。金额直接取领域模型；不把可变聚合返回给调用方，也不把此应用结果预先认定为最终 HTTP 契约。`AddSalesApplication()` 注册 MediatR 及处理器，当前测试通过作用域内的 ISender.Send 验证分发。API 尚未调用该注册，也未暴露业务路由。
 
-应用测试覆盖成功与原版本保存、免费行有效修改、同值不保存、过期版本、缺失报价/行、非法输入、领域金额溢出、存储故障/冲突传播、取消与实际分发。该入口是 CQRS 的第一个写用例；读取用例见下节，真实仓储已验证，HTTP 和跨进程消息继续按后续小步骤接入。
+应用测试覆盖成功与原版本保存、免费行有效修改、同值不保存、过期版本、缺失报价/行、非法输入、领域金额溢出、存储故障/冲突传播、取消与实际分发。该入口是 CQRS 的第一个写用例；读取用例见下节，真实仓储与 HTTP 已验证，跨进程消息继续按后续小步骤接入。
 
 ### 查询报价：独立的读取职责与结果快照
 
@@ -272,7 +272,7 @@ MediatR 提供进程内用例分发入口，让 API 不依赖具体处理器；�
 
 本期先复用仓储读取入口，避免为小规模报价建立第二套数据访问接口。代价是读取也要加载完整聚合；未来若有规模或性能依据，可以改成只查询 DTO 所需字段。命令/查询处理器分开即为当前 CQRS 的职责分离，不要求不同数据库或读副本；共享仓储不会把查询变成写用例。
 
-空 ID/null 请求在仓储调用前拒绝，报价不存在抛出 KeyNotFoundException，真实空草稿则返回空行集合和零总额。已取消请求提前终止，CancellationToken 传给读取操作；读取异常向上传递，不伪造空报价。沿用现有 MediatR 程序集注册即可发现新 Handler。应用测试覆盖字段/顺序、金额精度、空草稿、不改变/保存、独立结果、失败与取消及查询→修改→查询分发；T02.3c 另以真实仓储验证处理器读写，HTTP 尚未接入。
+空 ID/null 请求在仓储调用前拒绝，报价不存在抛出 KeyNotFoundException，真实空草稿则返回空行集合和零总额。已取消请求提前终止，CancellationToken 传给读取操作；读取异常向上传递，不伪造空报价。沿用现有 MediatR 程序集注册即可发现新 Handler。应用测试覆盖字段/顺序、金额精度、空草稿、不改变/保存、独立结果、失败与取消及查询→修改→查询分发；T02.3c 另以真实仓储验证处理器读写，HTTP 接入见 T02.2c。
 
 ### 最小 PostgreSQL 持久化映射
 
@@ -292,7 +292,7 @@ Quantity 经值转换保存 decimal 数值，读回构造 Quantity；Money 保�
 
 代价是 EF 配置需了解私有集合，值转换依赖固定 EUR 约束，修改只读行实例时需要明确跟踪策略。上下文保存钩子只对 Added 报价分配行顺序；已有报价的修改、顺序和原子并发保存由以下仓储适配器负责，不能仅依赖 IsConcurrencyToken。
 
-初始迁移只创建 Sales 两张表及索引/约束，不读取其他服务表；ProjectId 唯一索引落实每项目一份草稿，项目本身存在性仍待应用步骤。SalesDbContextFactory 从 ConnectionStrings__Sales 读取连接；Use-SalesDatabase.ps1 从本机忽略的 .env 设置连接且不显示密码。PostgreSQL 使用 Compose 已有卷，无需本机数据库安装或 pgAdmin。本步未装配 API 数据库依赖，也未启动 SQL Server/RabbitMQ。
+初始迁移只创建 Sales 两张表及索引/约束，不读取其他服务表；ProjectId 唯一索引落实每项目一份草稿，项目本身存在性仍待应用步骤。SalesDbContextFactory 从 ConnectionStrings__Sales 读取连接；Use-SalesDatabase.ps1 从本机忽略的 .env 设置连接且不显示密码。PostgreSQL 使用 Compose 已有卷，无需本机数据库安装或 pgAdmin。映射步骤未装配 API 数据库依赖；T02.2c 已完成装配，仍未启动 SQL Server/RabbitMQ。
 
 验证使用真实 PostgreSQL：首次提交后用新上下文读回多行报价、顺序、身份、金额、精度及已修改版本；空草稿保留版本；相同行 ID 可属于不同报价；重复项目及零数量被数据库拒绝。测试迁移可重复执行，数据只按测试生成的报价 ID 清理，不重置库或 schema。默认跳过需数据库的测试，显式运行 Test-SalesPersistence.ps1 才执行该验收；迁移快照一致性检查不依赖数据库。
 
@@ -302,11 +302,21 @@ Quantity 经值转换保存 decimal 数值，读回构造 Quantity；Money 保�
 
 保存顺序为：开始事务 → 按原版本更新报价总额/新版本 → 删除该报价旧行 → 按领域集合顺序插入当前行 → 提交。报价行沿用原 ID，金额直接复制领域结果；Position 属于持久化，仓储按集合下标维护。旧行先删除解决不可变行替换的 EF 身份冲突与行删除后 Position 唯一索引冲突。全部 SQL 在同一事务内执行，失败时释放事务并回滚，不留下新版本配旧行的状态。成功更新表头后数据库只在短暂保存事务内持有该行锁，不在用户打开页面或编辑期间持锁。
 
-读取与保存各通过 IDbContextFactory 创建并释放独立上下文，不混入其他操作的跟踪实体；加载使用 AsNoTracking 与 AsSingleQuery，有序地一次读取表头和行。SaveAsync 只保存已经存在且有效修改过的报价，要求领域 Version 高于原版本；创建用例及 API DI 装配另起步骤。相同输入由应用处理器跳过保存。失败的内存 Quote 不被自动回滚或重试，调用方应丢弃并重新加载。该边界也不支持跨聚合事务。
+读取与保存各通过 IDbContextFactory 创建并释放独立上下文，不混入其他操作的跟踪实体；加载使用 AsNoTracking 与 AsSingleQuery，有序地一次读取表头和行。SaveAsync 只保存已经存在且有效修改过的报价，要求领域 Version 高于原版本；创建用例另起步骤，API DI 已在 T02.2c 装配。相同输入由应用处理器跳过保存。失败的内存 Quote 不被自动回滚或重试，调用方应丢弃并重新加载。该边界也不支持跨聚合事务。
 
 取舍：整份行快照替换实现简单，每次修改的写入量与报价行数成正比。本期小草稿、无独立行引用/历史表时采用；大型报价、行级并行编辑或外部行外键出现时，应评估差异更新或拆分聚合。整个报价仍共用一个版本，不悄悄改变此前约定。此步无领域规则、表结构、迁移或依赖版本变更。
 
-真实 PostgreSQL 验证：命令修改后查询读到新金额而旧 DTO 不变；连续保存的增删/改价保留身份和顺序，最后一行可删除，其他报价不受影响；两个独立上下文读取同版本后竞争保存只有一个成功；读取后删除返回冲突；通过 EF 拦截器确认表头已更新、旧行已删除后注入失败，验证事务恢复原版本/总额/全部行。HTTP 冲突响应、SignalR 和消息发布尚未实现。
+真实 PostgreSQL 验证：命令修改后查询读到新金额而旧 DTO 不变；连续保存的增删/改价保留身份和顺序，最后一行可删除，其他报价不受影响；两个独立上下文读取同版本后竞争保存只有一个成功；读取后删除返回冲突；通过 EF 拦截器确认表头已更新、旧行已删除后注入失败，验证事务恢复原版本/总额/全部行。HTTP 冲突响应已在 T02.2c 实现，SignalR 和消息发布尚未实现。
+
+### 查询/工程量修改 HTTP 与 Swagger（T02.2c）
+
+用户需要通过页面实际调用已完成的用例，因此本步装配最小 GET/PATCH 与 Swagger UI。Program.cs 注册 MediatR、IDbContextFactory 和 IQuoteRepository，只将 URL/请求体转换为已有 Query/Command。金额由 Quote 计算，HTTP 不重复业务逻辑。ChangeQuantityRequest 只接收 quantity 与 expectedVersion，报价/行 ID 来自路径；返回已有 Result DTO。
+
+SalesExceptionHandler 把参数/输入溢出转为 400，缺失报价或行转为 404，QuoteConcurrencyException 转为 409；其他故障由统一 500 处理，不向调用方暴露数据库异常内容。同值请求仍先检查版本。此步验证已有业务用例的 HTTP 路径，未实现创建报价、增删行和改售价的 HTTP。
+
+Swagger 使用固定版本 Swashbuckle.AspNetCore 9.0.6，支持当前 .NET 8，不升级框架或现有 EF/MediatR。UI 与 OpenAPI 文档只在 Development 启用。参考 [ASP.NET Core 8 Swagger 指南](https://learn.microsoft.com/en-us/aspnet/core/tutorials/web-api-help-pages-using-swagger?view=aspnetcore-8.0) 与 [包版本依赖](https://www.nuget.org/packages/Swashbuckle.AspNetCore/9.0.6)。UI 展示接口，不能替代数据库并发控制；真实 HTTP 测试验证查询、数量保存、重读、非法输入和版本冲突。
+
+为便于手动操作，显式 Development 命令 --seed-sample 通过 SalesSampleData 应用迁移并创建固定 ID 的两行报价，金额由领域方法计算。重复执行保留已有数据，身份被其他报价占用时失败；正常启动不迁移、不写数据。该命令不提供可重置数据的 HTTP 入口，也不代表创建报价业务用例已经完成。指南见 [Swagger 操作步骤](sales-api-walkthrough.zh-CN.md)。
 
 ### 为什么跨服务采用事件以及代价
 
@@ -360,3 +370,5 @@ Docker Compose 满足本期的本地服务编排需求。Kubernetes、云与鉴�
 | 2026-09-25 | GetQuoteQuery 复用仓储读取，返回独立 DTO 与只读行集合 | 查询不修改、递增版本或保存；复用整份聚合读取控制规模，专用读取投影按后续需求决定；验证进程内查询→修改→查询 |
 | 2026-09-25 | EF Core 直接映射报价聚合；numeric 保留 decimal，复合行主键与显式 Position 保留归属/顺序 | 真实 PostgreSQL 首次保存/新上下文读回通过；Domain 无 EF 依赖，仓储修改跟踪、聚合原子并发和 API 后续实现 |
 | 2026-09-25 | EfQuoteRepository 以独立上下文读取，通过版本条件 UPDATE 与行快照替换事务保存 | 真实数据库验证竞争只有一个写者成功、故障全部回滚；保留领域计算及聚合级并发，整份重写适用于本期小草稿；API 装配后续实现 |
+
+| 2026-09-25 | T02.2c 装配 GET/PATCH、Swagger 与统一 400/404/409 响应，增加显式示例初始化 | HTTP 复用已有领域/用例/仓储；示例重复初始化保留修改；Swashbuckle 固定 9.0.6；Windows PowerShell 5.1 脚本编码统一 UTF-8 BOM |

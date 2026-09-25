@@ -1,4 +1,4 @@
-# 使用点调用方式加载脚本：. ./scripts/Use-Dotnet.ps1
+﻿# 使用点调用方式加载脚本：. ./scripts/Use-Dotnet.ps1
 # 仅修改当前 PowerShell 会话的环境。
 $ErrorActionPreference = 'Stop'
 $localDotnetRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\dotnet'

@@ -65,6 +65,7 @@
 ## 环境与接续注意
 
 - 当前开发环境为 Windows / PowerShell；.NET 8 SDK 位于用户目录，原 .NET 10 SDK 保留。用 `. ./scripts/Use-Dotnet.ps1` 为当前会话选择 SDK。
+- Windows PowerShell 5.1 的 `.ps1` 文件使用 UTF-8 BOM，避免中文注释按系统代码页误读；`.editorconfig` 已固定该编码约定。
 - 运行时是否仍可用需要重新检查，不能把上次 API 或容器健康状态当成当前状态。
 - `.env` 保存在本机并被 Git 忽略；不向上下文文件复制密码。换环境时按 README 重新初始化。
 - 文件写入本地与 Git 提交、远端推送是不同状态。提交和推送结果以 Git 实际状态为准，不在上下文文件里预先宣称完成。

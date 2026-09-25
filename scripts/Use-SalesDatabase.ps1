@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 $salesEnvironmentFile = Join-Path (Split-Path -Parent $PSScriptRoot) '.env'
 if (-not (Test-Path -LiteralPath $salesEnvironmentFile)) {
     throw 'Run scripts/Initialize-LocalEnvironment.ps1 first.'
