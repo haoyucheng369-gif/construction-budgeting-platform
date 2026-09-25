@@ -52,4 +52,38 @@ public sealed class Quote
 
         return line;
     }
+
+    public QuoteLine ChangeLineQuantity(Guid lineId, Quantity quantity)
+    {
+        if (lineId == Guid.Empty)
+        {
+            throw new ArgumentException("A quote line must have an ID.", nameof(lineId));
+        }
+
+        ArgumentNullException.ThrowIfNull(quantity);
+
+        var index = _lines.FindIndex(line => line.Id == lineId);
+        if (index < 0)
+        {
+            throw new KeyNotFoundException("The quote does not contain this line ID.");
+        }
+
+        var original = _lines[index];
+        if (original.Quantity == quantity)
+        {
+            return original;
+        }
+
+        var updated = new QuoteLine(
+            original.Id, original.WorkItemCode, original.Description, original.Unit,
+            quantity, original.SalesUnitPrice);
+        var newTotal = new Money(
+            TotalSalesAmount.Amount - original.LineAmount.Amount + updated.LineAmount.Amount);
+
+        // Replace only after all validation and calculations have succeeded.
+        _lines[index] = updated;
+        TotalSalesAmount = newTotal;
+
+        return updated;
+    }
 }
