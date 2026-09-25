@@ -6,12 +6,12 @@
 
 - 最近更新：2026-09-25。
 - 当前阶段：**T01、T02.1 已完成，T02 整体未完成**；六大阶段总览见 [实施计划](implementation-plan.zh-CN.md)。
-- 当前代码任务：**T02.2a 已完成**；修改数量命令/处理器、结果 DTO、仓储契约、应用层版本预检查及 MediatR 注册已通过测试替身和实际进程内分发验证。下一小步为 T02.2b 查询报价，尚未实现。
+- 当前代码任务：**T02.2b 已完成**；GetQuoteQuery/Handler 与独立只读结果已通过测试，查询不修改状态或保存，MediatR 的查询→修改→查询路径已验证。下一小步为 T02.3b 最小持久化映射与迁移，尚未实现。
 - 实施约定：按 [CONTEXT.md](CONTEXT.md) 每次只推进一小步，先讲设计再实现；讨论问题时不自动写业务代码；理由记录在架构决策第 8 节。
 - 架构约定：Sales 保留 Clean 四层；Compositions 在 T04.3 / T05 明确采用六边形端口与适配器，并与 Sales 对照说明；Library、Budget 延续简单分层。六大阶段写入实施计划，完成状态只在本清单维护。
-- 本次验证（2026-09-25，修改数量用例）：更新依赖锁文件后 locked-mode 还原通过；编译 0 警告/0 错误；108 项领域、18 项应用（含 MediatR Send 分发）、2 项宿主测试全部通过，共 128 项。仓储使用测试替身；未运行数据库/消息集成检查，未启动 Docker 或独立 API 进程。
+- 本次验证（2026-09-25，查询报价）：locked-mode 还原通过；编译 0 警告/0 错误；108 项领域、27 项应用（原有 18 + 查询 9）、2 项宿主测试全部通过，共 137 项。仓储使用测试替身；未运行数据库/消息集成检查，未启动 Docker 或独立 API 进程。
 - 历史验证（2026-09-18）：实际 HTTP `/health` 返回 200 Healthy；三个容器健康；PostgreSQL Sales schema 可读写且隔离；SQL Server 基准可读且 UPDATE 被拒绝；RabbitMQ 管理接口认证成功；预算初始化可重复执行。2026-09-24 会话中只读检查 `docker compose ps -a` 时 Docker Linux 引擎不可连接；历史健康状态不代表当前可用。
-- 下一步：T02.2b，先对照命令解释查询，再实现 GetQuoteQuery/Handler 和只读结果 DTO，返回报价/项目身份、行、金额和版本；复用当前仓储读取入口，用测试替身验证读取、不存在及查询不修改/保存。仍不接 HTTP 或数据库；查询完成后安排 T02.3 的 EF Core/PostgreSQL 持久化与原子版本比较，再接 API。本期预置预算项目标识为 `11111111-1111-1111-1111-111111111111`。
+- 下一步：T02.3b，先说明 Quote/QuoteLine 与 Money/Quantity 如何映射到 sales schema，明确 decimal 精度、行顺序和版本恢复方式，再实现最小 SalesDbContext、映射与初始迁移，验证真实 PostgreSQL 保存后用新上下文读回。不一次完成整个持久化：IQuoteRepository 适配器、原子版本比较与 API 随后分别接入。开始前重新检查 Docker；数据库不可用时如实保留未完成验收。本期预置预算项目标识为 `11111111-1111-1111-1111-111111111111`。
 - 环境：Windows；SDK 8.0.425 / 运行时 8.0.31 已在用户目录单独安装；原 SDK 10.0.300 保留；Node 22.22.0、npm 10.9.4；Docker 29.1.3、Compose 2.40.3。
 - 阻塞点：当前应用用例与替身验证无阻塞。新 PowerShell 会话先执行 `. ./scripts/Use-Dotnet.ps1` 选择 SDK；后续需要基础设施时再启动并检查 Docker Desktop。
 - 已知限制：仓储只有接口和测试替身；尚无持久化版本恢复、数据库原子比较、HTTP 冲突响应或 API 的应用层装配。处理器的版本预检查不能防止读取后发生的并发写入；保存失败后须丢弃该工作单元，不复用已修改的内存报价。数量/售价更新替换只读行实例，EF Core 跟踪映射待设计。项目存在性、每项目一份草稿及配方单位匹配未验证；行定位须携带 QuoteId。Money 仅支持 EUR。业务 API、持久化、其他三个宿主、React 页面和服务间消息尚未实现。应用 Dockerfile 在 T09；React 在 T03。
@@ -46,9 +46,10 @@
 - [x] T02.1g 实现 RemoveLine：按当前行金额更新总额，允许空草稿；验证缺失/空 ID、重复删除、修改后删除和跨报价隔离。
 - [ ] T02.2 实现创建项目/报价、添加/删除行、更新数量/售价及查询的 MediatR 用例和 REST API。
 - [x] T02.2a 实现修改数量的 MediatR 命令/处理器与最小仓储契约，使用测试替身验证应用协调；API 与数据库适配器后续实现。
-- [ ] T02.2b 实现 GetQuoteQuery/Handler 与只读结果 DTO；验证查询不修改状态或保存，暂不接 HTTP/数据库。
+- [x] T02.2b 实现 GetQuoteQuery/Handler 与只读结果 DTO；验证查询不修改状态或保存，暂不接 HTTP/数据库。
 - [ ] T02.3 接入 EF Core/PostgreSQL、迁移和报价版本；验证保存、重新读取、非法输入与并发冲突。
 - [x] T02.3a 先实现 Quote.Version 的内存变化规则：有效输入变化递增，同值无操作和失败不递增；数据库原子比较与冲突响应随后接入。
+- [ ] T02.3b 实现最小 SalesDbContext、聚合映射与初始迁移；验证 PostgreSQL 保存后在新上下文读回身份、顺序、值对象、金额及版本。仓储适配器和并发保存另起小步。
 
 验收：API 完成一次报价编辑流程，重启后能读取；领域规则测试和必要持久化检查通过。
 
@@ -69,6 +70,8 @@ T02.1g 验证（2026-09-25）：`. ./scripts/Use-Dotnet.ps1` 后执行 `dotnet r
 T02.3a 验证（2026-09-25）：`. ./scripts/Use-Dotnet.ps1` 后执行 `dotnet restore ConstructionBudgeting.sln --locked-mode`、`dotnet build ConstructionBudgeting.sln --no-restore`、`dotnet test ConstructionBudgeting.sln --no-build --no-restore` 全部通过；编译 0 警告/0 错误，领域 108/108、宿主 2/2。新增 `QuoteVersionTests.cs` 16 个案例，验证初始值、四种编辑递增、空报价不重置版本、同值无操作、零金额/舍入金额不变的有效修改、校验/金额溢出失败、重复删除、改回原值及报价间独立。未运行数据库或消息检查；T02.3 的持久化与并发验收尚未完成。
 
 T02.2a 验证（2026-09-25）：`. ./scripts/Use-Dotnet.ps1` 后运行 `dotnet restore ConstructionBudgeting.sln` 更新新依赖锁文件，再执行 `dotnet restore ConstructionBudgeting.sln --locked-mode`、`dotnet build ConstructionBudgeting.sln --no-restore`、`dotnet test ConstructionBudgeting.sln --no-build --no-restore`，全部通过；编译 0 警告/0 错误，领域 108/108、应用 18/18、宿主 2/2。新增应用测试项目 `tests/Unit/ConstructionBudgeting.Sales.Application.Tests`，验证成功返回领域金额、保存原版本、零价有效修改、同值不保存、过期版本（含同值请求）、非法输入、缺失报价/行、计算溢出、保存冲突/故障传播、取消及 DI/MediatR 分发。数据库原子性、真实存储、HTTP 和 RabbitMQ 尚未验证。
+
+T02.2b 验证（2026-09-25）：`. ./scripts/Use-Dotnet.ps1` 后执行 `dotnet restore ConstructionBudgeting.sln --locked-mode`、`dotnet build ConstructionBudgeting.sln --no-restore`、`dotnet test ConstructionBudgeting.sln --no-build --no-restore` 全部通过；编译 0 警告/0 错误，领域 108/108、应用 27/27、宿主 2/2。新增 `GetQuoteTests.cs` 9 个案例，覆盖身份/行字段/顺序/舍入金额、空报价、不改变聚合或保存、独立只读快照、缺失报价、空 ID/null、取消、读取故障传播，以及 MediatR 查询→修改→查询。未新增依赖，未执行 HTTP 业务、数据库或消息验收。
 
 ### T03 最小报价页面（第 3 天）
 
@@ -165,3 +168,4 @@ Kubernetes、云、CI/CD、鉴权、Redis、多实例、自动定价与完整端
 | 2026-09-25 | T02.1g | Sales.Domain/Quotations/Quote.cs 新增 RemoveLine；tests/Unit/ConstructionBudgeting.Sales.Domain.Tests/QuoteRemovalTests.cs 新增 10 项测试，更新架构决策及 README。上述 locked-mode 还原、build、test 通过，0 警告/0 错误，领域 92 + 宿主 2 项通过；未运行基础设施检查 | T02.3a 报价版本的内存规则，再进入 T02.2 用例 |
 | 2026-09-25 | T02.3a | Sales.Domain/Quotations/Quote.cs 增加 Version 及四种编辑的递增规则；tests/Unit/ConstructionBudgeting.Sales.Domain.Tests/QuoteVersionTests.cs 新增 16 项测试，更新架构决策及 README。上述 locked-mode 还原、build、test 通过，0 警告/0 错误，领域 108 + 宿主 2 项通过；未运行基础设施检查 | T02.2a 修改数量的应用命令/处理器与仓储契约 |
 | 2026-09-25 | T02.2a | Sales.Application/Quotations/ChangeQuoteLineQuantity 新增命令、处理器、结果；新增 IQuoteRepository、QuoteConcurrencyException、DependencyInjection.cs，固定 MediatR 12.5.0，加入应用测试项目及锁文件。上述还原/build/test 通过，领域 108 + 应用 18 + 宿主 2；未运行基础设施检查 | T02.2b 查询报价用例，返回 DTO 并验证只读行为 |
+| 2026-09-25 | T02.2b | Sales.Application/Quotations/GetQuote 新增 Query、Handler、GetQuoteResult、QuoteLineDetails；应用测试 GetQuoteTests.cs 新增 9 项，更新架构决策及 README。上述 locked-mode 还原/build/test 通过，领域 108 + 应用 27 + 宿主 2；未运行基础设施检查 | T02.3b 最小 EF Core 映射与迁移，验证真实数据库保存/读回 |

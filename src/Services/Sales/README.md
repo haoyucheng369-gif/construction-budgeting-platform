@@ -39,6 +39,12 @@ External database, message-broker and browser contracts must not replace or leak
 
 `AddSalesApplication()` registers MediatR 12.5.0 and handlers. Tests exercise real `ISender.Send` dispatch with a scoped repository test double. The API has not yet called this registration or exposed the business command; no production repository adapter exists. HTTP routes, error mapping, database atomicity and integration events remain subsequent work.
 
+## Quotation query use case
+
+`Application/Quotations/GetQuote` contains `GetQuoteQuery`, `GetQuoteHandler`, `GetQuoteResult` and `QuoteLineDetails`. The query carries only QuoteId. Its handler reads through the same `IQuoteRepository` and copies quote/project IDs, version, currency, total and ordered line details into a detached result. It preserves unit-price precision and copies calculated amounts without recalculating them. The returned line collection is materialized and wrapped as read-only; later aggregate changes do not alter an earlier result.
+
+Queries do not call domain mutation methods or `SaveAsync`. Empty drafts return zero EUR and an empty collection; missing quotes throw `KeyNotFoundException`. Invalid IDs, cancellation and storage errors are propagated without returning fabricated data. Existing MediatR assembly registration discovers the query handler. This is separation of application read/write responsibilities using the same repository, with no separate read database or HTTP endpoint. Loading the whole aggregate keeps the current implementation small; a dedicated read projection remains an option if later requirements justify it.
+
 ## Current verification
 
 The integration test project starts the real ASP.NET Core pipeline in memory. It checks liveness without external dependencies and ProblemDetails for unknown routes. `/health` does not yet check database or broker readiness.
@@ -60,3 +66,5 @@ Removal tests cover remaining-line identity/order, empty drafts, zero-price line
 Version tests cover initialization, increments across edits, unchanged amounts with changed inputs, no-op changes, validation and amount-overflow failures, repeated removal, reverting to a previous quantity and independent quotations.
 
 `tests/Unit/ConstructionBudgeting.Sales.Application.Tests` references Application and uses a repository test double. It checks quantity-change results, expected-version forwarding, no-op behavior, stale input, missing records, invalid values, domain overflow, save failures, cancellation-token forwarding and DI/MediatR dispatch. These checks do not prove persistence or database concurrency behavior.
+
+Query tests verify all returned fields, line order, rounded amounts, empty drafts, unchanged aggregate state, no save calls, detached read-only results, missing/invalid input, cancellation and read failures. A MediatR query→command→query test checks both handlers and confirms that only the command calls save.
