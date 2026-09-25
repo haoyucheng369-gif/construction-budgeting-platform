@@ -2,7 +2,7 @@
 
 Construction ERP services for project quotations, resource costing, budget comparison, and margin calculation. Changes to quantities and resource prices propagate between services through an event bus, with real-time updates to the quotation workspace.
 
-**Project status:** Sales service skeleton and local infrastructure are implemented and verified (T01). The domain includes `Quantity`, EUR `Money`, `QuoteLine`, and a `Quote` aggregate that adds lines, rejects duplicate line IDs, changes quantities and sales unit prices, and maintains totals from rounded line amounts. Unit tests cover these rules and unchanged state on failed changes. Removal, versioning, business endpoints, persistence, the remaining service hosts, messaging integration and the React application are not yet implemented. See the [delivery checklist](docs/TODO.md) for progress and the [six implementation stages](docs/implementation-plan.zh-CN.md) for the roadmap.
+**Project status:** Sales service skeleton and local infrastructure are implemented and verified (T01). The domain includes `Quantity`, EUR `Money`, `QuoteLine`, and a `Quote` aggregate that adds and removes lines, rejects duplicate line IDs, changes quantities and sales unit prices, and maintains totals from rounded line amounts. Unit tests cover these rules and unchanged state on failed changes. Versioning, business endpoints, persistence, the remaining service hosts, messaging integration and the React application are not yet implemented. See the [delivery checklist](docs/TODO.md) for progress and the [six implementation stages](docs/implementation-plan.zh-CN.md) for the roadmap.
 
 ## Core workflow
 

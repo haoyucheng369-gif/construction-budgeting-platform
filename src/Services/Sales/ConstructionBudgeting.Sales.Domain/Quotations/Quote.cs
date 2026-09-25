@@ -53,6 +53,26 @@ public sealed class Quote
         return line;
     }
 
+    public void RemoveLine(Guid lineId)
+    {
+        if (lineId == Guid.Empty)
+        {
+            throw new ArgumentException("A quote line must have an ID.", nameof(lineId));
+        }
+
+        var index = _lines.FindIndex(line => line.Id == lineId);
+        if (index < 0)
+        {
+            throw new KeyNotFoundException("The quote does not contain this line ID.");
+        }
+
+        // Use the current rounded amount, including any earlier quantity or price changes.
+        var newTotal = new Money(TotalSalesAmount.Amount - _lines[index].LineAmount.Amount);
+
+        _lines.RemoveAt(index);
+        TotalSalesAmount = newTotal;
+    }
+
     public QuoteLine ChangeLineQuantity(Guid lineId, Quantity quantity)
     {
         if (lineId == Guid.Empty)
