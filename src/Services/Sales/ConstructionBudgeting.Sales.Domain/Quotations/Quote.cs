@@ -86,4 +86,38 @@ public sealed class Quote
 
         return updated;
     }
+
+    public QuoteLine ChangeLineSalesUnitPrice(Guid lineId, Money salesUnitPrice)
+    {
+        if (lineId == Guid.Empty)
+        {
+            throw new ArgumentException("A quote line must have an ID.", nameof(lineId));
+        }
+
+        ArgumentNullException.ThrowIfNull(salesUnitPrice);
+
+        var index = _lines.FindIndex(line => line.Id == lineId);
+        if (index < 0)
+        {
+            throw new KeyNotFoundException("The quote does not contain this line ID.");
+        }
+
+        var original = _lines[index];
+        if (original.SalesUnitPrice == salesUnitPrice)
+        {
+            return original;
+        }
+
+        var updated = new QuoteLine(
+            original.Id, original.WorkItemCode, original.Description, original.Unit,
+            original.Quantity, salesUnitPrice);
+        var newTotal = new Money(
+            TotalSalesAmount.Amount - original.LineAmount.Amount + updated.LineAmount.Amount);
+
+        // QuoteLine validates the price and rounds the product before state changes.
+        _lines[index] = updated;
+        TotalSalesAmount = newTotal;
+
+        return updated;
+    }
 }

@@ -6,15 +6,15 @@
 
 - 最近更新：2026-09-25。
 - 当前阶段：**T01 已完成，T02.1 进行中**；六大阶段总览见 [实施计划](implementation-plan.zh-CN.md)。
-- 当前代码任务：**T02.1 部分完成，T02.1a–e 已完成**；Quote 已支持创建/添加/汇总及修改行数量。下一小步为通过 Quote 修改销售单价，尚未实现。
+- 当前代码任务：**T02.1 部分完成，T02.1a–f 已完成**；Quote 已支持添加行、修改数量和销售单价并维护总额。下一小步为通过 Quote 删除报价行，尚未实现。
 - 实施约定：按 [CONTEXT.md](CONTEXT.md) 每次只推进一小步，先讲设计再实现；讨论问题时不自动写业务代码；理由记录在架构决策第 8 节。
 - 架构约定：Sales 保留 Clean 四层；Compositions 在 T04.3 / T05 明确采用六边形端口与适配器，并与 Sales 对照说明；Library、Budget 延续简单分层。六大阶段写入实施计划，完成状态只在本清单维护。
-- 本次验证（2026-09-25，修改数量）：locked-mode 还原通过；编译 0 警告/0 错误；66 项领域测试（原有 55 + 修改数量 11）与 2 项宿主集成测试全部通过。未运行数据库/消息集成检查，未启动 Docker 或独立 API 进程。
+- 本次验证（2026-09-25，修改售价）：locked-mode 还原通过；编译 0 警告/0 错误；82 项领域测试（原有 66 + 修改售价 16）与 2 项宿主集成测试全部通过。未运行数据库/消息集成检查，未启动 Docker 或独立 API 进程。
 - 历史验证（2026-09-18）：实际 HTTP `/health` 返回 200 Healthy；三个容器健康；PostgreSQL Sales schema 可读写且隔离；SQL Server 基准可读且 UPDATE 被拒绝；RabbitMQ 管理接口认证成功；预算初始化可重复执行。2026-09-24 会话中只读检查 `docker compose ps -a` 时 Docker Linux 引擎不可连接；历史健康状态不代表当前可用。
-- 下一步：先回顾 Quote.ChangeLineQuantity 的查找、同值判断、只读行替换和失败保护，再实现通过 Quote 修改一行销售单价，保持数量/身份/其他字段，校验非负价格并重算行金额和总额。删除和版本继续分步，不同时接入 API、数据库或消息。关联预算的预置项目标识为 `11111111-1111-1111-1111-111111111111`。
+- 下一步：先回顾 ChangeLineSalesUnitPrice 与数量修改的共同边界，再实现 Quote.RemoveLine：按当前报价内行 ID 删除并维护总额，允许删除最后一行后成为零金额空草稿，验证缺失行/空 ID 不改变状态、修改后删除使用最新金额。版本另起小步，不同时接入 API、数据库或消息。关联预算的预置项目标识为 `11111111-1111-1111-1111-111111111111`。
 - 环境：Windows；SDK 8.0.425 / 运行时 8.0.31 已在用户目录单独安装；原 SDK 10.0.300 保留；Node 22.22.0、npm 10.9.4；Docker 29.1.3、Compose 2.40.3。
 - 阻塞点：当前纯领域步骤无阻塞。新 PowerShell 会话先执行 `. ./scripts/Use-Dotnet.ps1` 选择 SDK；后续需要基础设施时再启动并检查 Docker Desktop。
-- 已知限制：尚无售价修改、删除或版本；数量更新返回相同行 ID 的新实例，旧行引用不自动更新，EF Core 跟踪映射待设计。行 ID 在报价内唯一，定位须携带 QuoteId；项目存在性、每项目一份草稿及配方单位匹配未验证。Money 仅支持 EUR；内存失败保护不等于数据库事务或并发控制。业务 API、持久化、其他三个宿主、React 页面和服务间消息尚未实现。应用 Dockerfile 在 T09；React 在 T03。
+- 已知限制：尚无删除或版本；数量/售价更新返回相同行 ID 的新实例，旧行引用不自动更新，EF Core 跟踪映射待设计。行 ID 在报价内唯一，定位须携带 QuoteId；项目存在性、每项目一份草稿及配方单位匹配未验证。Money 仅支持 EUR；内存失败保护不等于数据库事务或并发控制。业务 API、持久化、其他三个宿主、React 页面和服务间消息尚未实现。应用 Dockerfile 在 T09；React 在 T03。
 
 ## 已完成准备
 
@@ -42,6 +42,7 @@
 - [x] T02.1c 实现最小 QuoteLine：行身份、工程项/单位、数量、非负售价、行金额及边界测试；修改入口留到 Quote 聚合。
 - [x] T02.1d 实现最小 Quote：报价/项目身份、内部创建行、行 ID 去重、只读集合及逐行舍入后的总额；失败不改变状态。
 - [x] T02.1e 实现 ChangeLineQuantity：保留行身份和其他字段，重算金额；验证未找到/空值/溢出、跨报价隔离和同值更新。
+- [x] T02.1f 实现 ChangeLineSalesUnitPrice：非负售价、保留数量/身份、显式舍入与失败保护；验证同值和金额未变但单价变化的情况。
 - [ ] T02.2 实现创建项目/报价、添加/删除行、更新数量/售价及查询的 MediatR 用例和 REST API。
 - [ ] T02.3 接入 EF Core/PostgreSQL、迁移和报价版本；验证保存、重新读取、非法输入与并发冲突。
 
@@ -56,6 +57,8 @@ T02.1c 验证（2026-09-24）：`. ./scripts/Use-Dotnet.ps1` 后执行 `dotnet r
 T02.1d 验证（2026-09-25）：执行上述 SDK、locked-mode 还原、build、test 命令全部通过；编译 0 警告/0 错误，领域 55/55、宿主 2/2。新增 `QuoteTests.cs` 12 个案例，覆盖空报价、身份、添加汇总、重复行、逐行舍入、多报价隔离、集合保护与失败状态不变。未新增依赖或运行基础设施；编辑规则尚未实现，T02.1 保持未完成。
 
 T02.1e 验证（2026-09-25）：`. ./scripts/Use-Dotnet.ps1` 后执行 `dotnet restore ConstructionBudgeting.sln --locked-mode`、`dotnet build ConstructionBudgeting.sln --no-restore`、`dotnet test ConstructionBudgeting.sln --no-build --no-restore` 全部通过；编译 0 警告/0 错误，领域 66/66、宿主 2/2。新增 `QuoteQuantityTests.cs` 11 个案例，验证增减数量、保留身份/售价、舍入、同值无操作、缺失行/空值、溢出失败保护及跨报价隔离。未运行基础设施检查。
+
+T02.1f 验证（2026-09-25）：`. ./scripts/Use-Dotnet.ps1` 后执行 `dotnet restore ConstructionBudgeting.sln --locked-mode`、`dotnet build ConstructionBudgeting.sln --no-restore`、`dotnet test ConstructionBudgeting.sln --no-build --no-restore` 全部通过；编译 0 警告/0 错误，领域 82/82、宿主 2/2。新增 `QuoteSalesPriceTests.cs` 16 个案例，覆盖涨价/降价/零价、负价、精度与舍入、同值、金额不变但单价变化、空值/缺失行、溢出、跨报价隔离及与数量修改交错。未运行基础设施检查。
 
 ### T03 最小报价页面（第 3 天）
 
@@ -148,3 +151,4 @@ Kubernetes、云、CI/CD、鉴权、Redis、多实例、自动定价与完整端
 | 2026-09-24 | T02.1c | 新增 Sales.Domain/Quotations/QuoteLine.cs 与领域测试 QuoteLineTests.cs；更新架构理由及 README。locked-mode 还原通过，build 0 警告/0 错误，领域 43 + 宿主 2 项测试通过；未执行数据库/消息集成检查 | 回顾 QuoteLine，再讲解 Quote 聚合，先做创建/添加行/汇总；暂不推进 API 或持久化 |
 | 2026-09-25 | T02.1d | 新增 Sales.Domain/Quotations/Quote.cs 与领域测试 QuoteTests.cs；更新聚合边界、行身份范围及 README。locked-mode 还原通过，build 0 警告/0 错误，领域 55 + 宿主 2 项测试通过；未执行数据库/消息集成检查 | 回顾 Quote 后，通过聚合修改一行数量并验证总额与失败状态；售价、删除、版本继续拆小 |
 | 2026-09-25 | T02.1e | Quote.cs 新增 ChangeLineQuantity，新增领域测试 QuoteQuantityTests.cs；更新只读行替换取舍及 README。locked-mode 还原通过，build 0 警告/0 错误，领域 66 + 宿主 2 项测试通过；未运行基础设施检查 | 通过 Quote 修改销售单价；随后再分步处理删除和版本 |
+| 2026-09-25 | T02.1f | Quote.cs 新增 ChangeLineSalesUnitPrice，新增领域测试 QuoteSalesPriceTests.cs；更新售价约束及 README。locked-mode 还原通过，build 0 警告/0 错误，领域 82 + 宿主 2 项测试通过；未运行基础设施检查 | 通过 Quote 删除行并维护总额；版本另起小步 |
