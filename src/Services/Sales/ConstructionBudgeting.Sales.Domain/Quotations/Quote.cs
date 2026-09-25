@@ -9,6 +9,7 @@ public sealed class Quote
 
     public Guid Id { get; }
     public Guid ProjectId { get; }
+    public long Version { get; private set; } = 1;
     public IReadOnlyList<QuoteLine> Lines { get; }
     public Money TotalSalesAmount { get; private set; } = new(0m);
 
@@ -46,9 +47,11 @@ public sealed class Quote
 
         // Validate both the line and the new total before changing aggregate state.
         var newTotal = new Money(TotalSalesAmount.Amount + line.LineAmount.Amount);
+        var newVersion = checked(Version + 1);
 
         _lines.Add(line);
         TotalSalesAmount = newTotal;
+        Version = newVersion;
 
         return line;
     }
@@ -68,9 +71,11 @@ public sealed class Quote
 
         // Use the current rounded amount, including any earlier quantity or price changes.
         var newTotal = new Money(TotalSalesAmount.Amount - _lines[index].LineAmount.Amount);
+        var newVersion = checked(Version + 1);
 
         _lines.RemoveAt(index);
         TotalSalesAmount = newTotal;
+        Version = newVersion;
     }
 
     public QuoteLine ChangeLineQuantity(Guid lineId, Quantity quantity)
@@ -101,8 +106,10 @@ public sealed class Quote
             TotalSalesAmount.Amount - original.LineAmount.Amount + updated.LineAmount.Amount);
 
         // Replace only after all validation and calculations have succeeded.
+        var newVersion = checked(Version + 1);
         _lines[index] = updated;
         TotalSalesAmount = newTotal;
+        Version = newVersion;
 
         return updated;
     }
@@ -135,8 +142,10 @@ public sealed class Quote
             TotalSalesAmount.Amount - original.LineAmount.Amount + updated.LineAmount.Amount);
 
         // QuoteLine validates the price and rounds the product before state changes.
+        var newVersion = checked(Version + 1);
         _lines[index] = updated;
         TotalSalesAmount = newTotal;
+        Version = newVersion;
 
         return updated;
     }
