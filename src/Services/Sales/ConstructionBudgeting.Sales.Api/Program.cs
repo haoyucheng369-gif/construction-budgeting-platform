@@ -8,7 +8,7 @@ var app = builder.Build();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 
-// Liveness only: dependency readiness is added alongside persistence and messaging.
+// 当前仅检查进程存活；数据库和消息服务的就绪检查随相应功能接入。
 app.MapHealthChecks("/health");
 
 app.Run();

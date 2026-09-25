@@ -5,7 +5,7 @@ using Npgsql;
 
 namespace ConstructionBudgeting.Sales.Persistence.Tests;
 
-public sealed class SalesPersistenceTests
+public sealed partial class SalesPersistenceTests
 {
     [Fact]
     public void Migration_snapshot_matches_the_current_model()
@@ -22,7 +22,7 @@ public sealed class SalesPersistenceTests
     {
         await MigrateAsync();
         var quote = new Quote(Guid.NewGuid(), Guid.NewGuid());
-        // Deliberately insert in the opposite order to IDs, so primary-key order cannot hide a mapping bug.
+        // 故意按与 ID 排序相反的顺序插入，防止主键顺序碰巧正确而掩盖行顺序映射错误。
         var painting = quote.AddLine(Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff"),
             "PAINT", "Wall painting", "m2", new Quantity(100m), new Money(20m));
         var floor = quote.AddLine(Guid.Parse("00000000-0000-0000-0000-000000000001"),
@@ -183,7 +183,7 @@ public sealed class SalesPersistenceTests
     private static async Task DeleteQuotesAsync(params Guid[] quoteIds)
     {
         await using var cleanup = CreateContext();
-        // Delete only the random quote IDs owned by this test; never drop a database or schema.
+        // 只清理本测试随机创建的报价 ID，绝不删除整个数据库或 schema。
         await cleanup.Quotes.Where(quote => quoteIds.Contains(quote.Id)).ExecuteDeleteAsync();
     }
 }

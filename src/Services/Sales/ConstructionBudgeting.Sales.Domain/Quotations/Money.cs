@@ -1,8 +1,8 @@
 namespace ConstructionBudgeting.Sales.Domain.Quotations;
 
 /// <summary>
-/// An immutable EUR amount. Sign constraints belong to the business operation
-/// using the amount; rounding is explicit to preserve unit-price precision.
+/// 不可变的欧元金额。是否允许负数由使用金额的具体业务操作决定；
+/// 舍入需要显式调用，避免提前丢失单价精度。
 /// </summary>
 public sealed record Money
 {

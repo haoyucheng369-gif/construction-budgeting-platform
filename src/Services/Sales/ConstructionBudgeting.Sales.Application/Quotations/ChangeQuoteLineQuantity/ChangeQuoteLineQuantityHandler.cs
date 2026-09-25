@@ -29,7 +29,7 @@ public sealed class ChangeQuoteLineQuantityHandler(IQuoteRepository repository)
         var quote = await repository.GetByIdAsync(request.QuoteId, cancellationToken)
             ?? throw new KeyNotFoundException($"Quote '{request.QuoteId}' was not found.");
 
-        // Reject stale input before modifying the loaded aggregate, including no-op requests.
+        // 修改已加载的聚合前，先拒绝过期版本；即使数量没有变化，也要检查版本。
         var originalVersion = quote.Version;
         if (originalVersion != request.ExpectedVersion)
         {
@@ -39,7 +39,7 @@ public sealed class ChangeQuoteLineQuantityHandler(IQuoteRepository repository)
         var line = quote.ChangeLineQuantity(request.LineId, quantity);
         if (quote.Version != originalVersion)
         {
-            // The repository must also check atomically: another writer may save after our read.
+            // 读取后仍可能有人抢先保存，因此仓储必须在数据库写入时再次原子检查版本。
             await repository.SaveAsync(quote, originalVersion, cancellationToken);
         }
 

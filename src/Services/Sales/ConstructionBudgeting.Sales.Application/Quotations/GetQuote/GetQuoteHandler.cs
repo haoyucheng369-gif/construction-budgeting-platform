@@ -18,7 +18,7 @@ public sealed class GetQuoteHandler(IQuoteRepository repository)
         var quote = await repository.GetByIdAsync(request.QuoteId, cancellationToken)
             ?? throw new KeyNotFoundException($"Quote '{request.QuoteId}' was not found.");
 
-        // Materialize a detached snapshot; amounts are copied, not recalculated here.
+        // 生成与领域对象相互独立的结果快照；直接复制已有金额，查询时不重新计算。
         var lines = quote.Lines.Select(line => new QuoteLineDetails(
             line.Id, line.WorkItemCode, line.Description, line.Unit,
             line.Quantity.Value, line.SalesUnitPrice.Amount, line.LineAmount.Amount)).ToArray();

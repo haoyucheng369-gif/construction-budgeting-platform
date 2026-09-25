@@ -8,7 +8,7 @@ IF NOT EXISTS (
 
 BEGIN TRY
     BEGIN TRANSACTION;
-    -- No rows can change, even if the permissions are misconfigured.
+    -- 即使权限配置错误，这条语句也不会修改任何数据行。
     UPDATE budget.ProjectBaselines SET Amount = Amount WHERE 1 = 0;
     ROLLBACK TRANSACTION;
     THROW 50002, 'Budget reader unexpectedly has write access', 1;

@@ -1,7 +1,7 @@
 namespace ConstructionBudgeting.Sales.Domain.Quotations;
 
 /// <summary>
-/// A project quotation that owns its lines and controls changes to its total.
+/// 项目报价聚合根，管理其报价行，并统一控制总金额的变化。
 /// </summary>
 public sealed class Quote
 {
@@ -45,7 +45,7 @@ public sealed class Quote
 
         var line = new QuoteLine(lineId, workItemCode, description, unit, quantity, salesUnitPrice);
 
-        // Validate both the line and the new total before changing aggregate state.
+        // 先完成报价行校验和新总额计算，再修改聚合状态，避免失败后留下部分修改。
         var newTotal = new Money(TotalSalesAmount.Amount + line.LineAmount.Amount);
         var newVersion = checked(Version + 1);
 
@@ -69,7 +69,7 @@ public sealed class Quote
             throw new KeyNotFoundException("The quote does not contain this line ID.");
         }
 
-        // Use the current rounded amount, including any earlier quantity or price changes.
+        // 使用当前已舍入的行金额，其中已经包含此前数量或单价修改的结果。
         var newTotal = new Money(TotalSalesAmount.Amount - _lines[index].LineAmount.Amount);
         var newVersion = checked(Version + 1);
 
@@ -105,7 +105,7 @@ public sealed class Quote
         var newTotal = new Money(
             TotalSalesAmount.Amount - original.LineAmount.Amount + updated.LineAmount.Amount);
 
-        // Replace only after all validation and calculations have succeeded.
+        // 所有校验和计算成功后，才替换原报价行。
         var newVersion = checked(Version + 1);
         _lines[index] = updated;
         TotalSalesAmount = newTotal;
@@ -141,7 +141,7 @@ public sealed class Quote
         var newTotal = new Money(
             TotalSalesAmount.Amount - original.LineAmount.Amount + updated.LineAmount.Amount);
 
-        // QuoteLine validates the price and rounds the product before state changes.
+        // 先由 QuoteLine 校验售价，并对数量与售价的乘积舍入，再修改聚合状态。
         var newVersion = checked(Version + 1);
         _lines[index] = updated;
         TotalSalesAmount = newTotal;

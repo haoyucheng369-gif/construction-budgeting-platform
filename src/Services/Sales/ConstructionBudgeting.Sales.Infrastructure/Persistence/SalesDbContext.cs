@@ -7,7 +7,7 @@ public sealed class SalesDbContext(DbContextOptions<SalesDbContext> options) : D
 {
     public DbSet<Quote> Quotes => Set<Quote>();
 
-    // Relational tables have no implicit row order. Always load the complete ordered aggregate.
+    // 关系表没有默认行顺序；读取时始终加载完整聚合，并显式按保存的顺序排列报价行。
     public IQueryable<Quote> ReadQuotes() => Quotes.AsNoTracking()
         .Include(quote => quote.Lines.OrderBy(line => EF.Property<int>(line, "Position")));
 
@@ -33,7 +33,7 @@ public sealed class SalesDbContext(DbContextOptions<SalesDbContext> options) : D
 
     private void SetInitialLinePositions()
     {
-        // Initial inserts only. Replacing/editing tracked immutable lines is handled in the future repository.
+        // 此处只处理报价的首次插入；保存已修改的聚合时，由 EfQuoteRepository 设置行顺序。
         foreach (var entry in ChangeTracker.Entries<Quote>().Where(entry => entry.State == EntityState.Added))
         {
             for (var position = 0; position < entry.Entity.Lines.Count; position++)

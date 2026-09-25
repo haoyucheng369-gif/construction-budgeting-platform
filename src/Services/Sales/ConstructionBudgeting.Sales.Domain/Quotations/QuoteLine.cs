@@ -1,8 +1,8 @@
 namespace ConstructionBudgeting.Sales.Domain.Quotations;
 
 /// <summary>
-/// An identified work item in a quotation. Unit price is expressed per Unit;
-/// the line amount is rounded only after multiplying by the quantity.
+/// 报价中具有独立行标识的工程项。单价对应 Unit 所表示的计量单位；
+/// 先将单价乘以工程量，再对行金额进行舍入。
 /// </summary>
 public sealed class QuoteLine
 {

@@ -22,7 +22,7 @@ internal sealed class QuoteConfiguration : IEntityTypeConfiguration<Quote>
         builder.Property(quote => quote.TotalSalesAmount)
             .HasConversion(money => money.Amount, amount => new Money(amount, "EUR"))
             .HasColumnType("numeric").IsRequired();
-        // All Money values are EUR by domain contract; no separate currency entity is needed.
+        // 按当前领域约定，所有 Money 都使用欧元，无需建立独立的币种实体。
         builder.Property<string>("Currency").HasMaxLength(3).HasDefaultValue("EUR").IsRequired();
         builder.HasMany(quote => quote.Lines).WithOne().HasForeignKey("QuoteId")
             .IsRequired().OnDelete(DeleteBehavior.Cascade);

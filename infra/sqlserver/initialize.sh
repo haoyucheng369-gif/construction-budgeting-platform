@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# Generated passwords contain no SQL delimiters. Reject unsupported custom values.
+# 自动生成的密码不包含 SQL 分隔符；拒绝包含不支持字符的自定义密码。
 if [[ ! "$BUDGET_DB_PASSWORD" =~ ^[a-zA-Z0-9_!@#%+=.-]{12,128}$ ]]; then
   echo 'BUDGET_DB_PASSWORD must be 12-128 characters using letters, digits or _!@#%+=.-' >&2
   exit 1

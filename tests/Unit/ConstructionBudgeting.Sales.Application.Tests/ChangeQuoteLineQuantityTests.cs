@@ -174,7 +174,7 @@ public sealed class ChangeQuoteLineQuantityTests
         Assert.Same(failure, actual);
         Assert.Equal(1, repository.SaveCalls);
         Assert.Equal(2L, repository.ExpectedVersion);
-        // The loaded unit of work is already edited and must be discarded after a failed save.
+        // 本次加载的聚合已经在内存中被修改；保存失败后必须丢弃，不能继续复用。
         Assert.Equal(3L, quote.Version);
     }
 
@@ -226,7 +226,7 @@ public sealed class ChangeQuoteLineQuantityTests
     private static ChangeQuoteLineQuantityCommand CommandFor(Quote quote, decimal quantity = 120m) =>
         new(quote.Id, Assert.Single(quote.Lines).Id, quantity, quote.Version);
 
-    // Records application interactions; this is not a database or a concurrency implementation.
+    // 仅记录应用层与仓储的交互，不实现真实数据库或并发控制。
     private sealed class StubQuoteRepository(Quote? quote) : IQuoteRepository
     {
         public int ReadCalls { get; private set; }

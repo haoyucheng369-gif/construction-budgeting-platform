@@ -6,18 +6,20 @@
 
 - 最近更新：2026-09-25。
 - 当前阶段：**T01、T02.1 已完成，T02 整体未完成**；六大阶段总览见 [实施计划](implementation-plan.zh-CN.md)。
-- 当前代码任务：**T02.3b 已完成**；SalesDbContext、值对象转换、行顺序映射与初始迁移已验证，真实 PostgreSQL 首次保存及新上下文读回通过。下一小步为 T02.3c 仓储适配器与原子并发保存，尚未实现。
+- 当前代码任务：**T02.3c 已完成并验证，尚未提交**；T02.3b 已提交并推送（f0309f7）。真实仓储与整份报价原子并发保存已实现，下一小步是 T02.2c 最小查询 HTTP 接口。
+- 当前说明整理：按用户反馈，将 EfQuoteRepository 的长注释精简为 6 条短中文说明；CONTEXT 记录“源码少量短注释，详细原理在对话中解释”的偏好。已核对非注释内容不变，仅修改注释和文档，未重跑测试；T02.2c 尚未开始。
+- 本次整理：现有源码、测试、脚本及配置示例中的英文说明注释已统一翻译为中文。保留 XML 注释标签、自动生成标记及脚本解释器声明；对 48 个源码/脚本/配置文件核对非注释内容，修改前后一致，`git diff --check` 通过。本次未重跑业务测试，未提交或推送；下一业务步骤仍为 T02.2c。
 - 实施约定：按 [CONTEXT.md](CONTEXT.md) 每次只推进一小步，先讲设计再实现；讨论问题时不自动写业务代码；理由记录在架构决策第 8 节。
 - 架构约定：Sales 保留 Clean 四层；Compositions 在 T04.3 / T05 明确采用六边形端口与适配器，并与 Sales 对照说明；Library、Budget 延续简单分层。六大阶段写入实施计划，完成状态只在本清单维护。
-- 本次验证（2026-09-25，持久化映射）：启动 Docker Desktop 和 PostgreSQL；`./scripts/Test-SalesPersistence.ps1` 的 locked-mode 还原、build、test 全部通过，0 警告/0 错误；领域 108、应用 27、宿主 2、持久化 6（含真实 PostgreSQL 5 项）共 143 项通过，无跳过。CLI 重复更新迁移返回数据库已是最新；单独验证默认持久化测试为 1 项通过、5 项明确跳过。未执行 SQL Server/RabbitMQ 检查或业务 HTTP 验收。
+- 本次验证（2026-09-25，真实仓储）：重新确认 PostgreSQL healthy；推送前全套 143 项通过。完成仓储后执行 `./scripts/Test-SalesPersistence.ps1`，locked-mode 还原、build、test 全部通过，0 警告/0 错误；领域 108、应用 27、宿主 2、持久化 12（真实 PostgreSQL 11 项 + 离线快照 1 项）共 149 项通过，无跳过。新测试覆盖真实用例读写、连续保存/顺序/隔离、两个写者竞争、事务中途故障回滚、删除冲突与同值不保存。未执行 SQL Server/RabbitMQ 检查或业务 HTTP 验收；未新增迁移。
 - 历史验证（2026-09-18）：实际 HTTP `/health` 返回 200 Healthy；三个容器健康；PostgreSQL Sales schema 可读写且隔离；SQL Server 基准可读且 UPDATE 被拒绝；RabbitMQ 管理接口认证成功；预算初始化可重复执行。2026-09-24 会话中只读检查 `docker compose ps -a` 时 Docker Linux 引擎不可连接；历史健康状态不代表当前可用。
-- 下一步：T02.3c，先解释如何实现 IQuoteRepository.GetByIdAsync/SaveAsync，再完成 EF/PostgreSQL 仓储适配器；处理只读报价行替换、持久化顺序、按 ExpectedVersion 原子比较并保存整个聚合。验证两个独立上下文读同版本后只有一个保存成功、冲突不留下部分行/金额修改；接入已有修改数量用例做真实仓储验证。API/前端/消息仍另起步骤。本期预置预算项目标识为 `11111111-1111-1111-1111-111111111111`。
+- 下一步：T02.2c，先回顾 EfQuoteRepository 的版本条件和事务，再将应用/仓储装配到 API，只接入最小 GET 报价查询（建议 `/quotes/{id}`），说明 HTTP → MediatR → 仓储 → PostgreSQL 的路径。验收真实报价返回 DTO、缺失报价返回 404，并验证现有健康检查；数据仅由集成测试按随机 ID 创建/清理，不自动插入用户业务数据。创建/修改 HTTP、前端、消息继续分别推进。本期预置预算项目标识为 `11111111-1111-1111-1111-111111111111`。
 - 环境：Windows；SDK 8.0.425 / 运行时 8.0.31 已在用户目录单独安装；原 SDK 10.0.300 保留；Node 22.22.0、npm 10.9.4；Docker 29.1.3、Compose 2.40.3。
 - 本机数据库查看工具：用户已安装 Windows 桌面版 pgAdmin，连接 `127.0.0.1:5432`、数据库 `vente`、账号 `sales_app`，密码取本机 `.env`。按用户要求已删除旧网页工具容器 `construction-pgadmin`、专属设置卷 `construction-pgadmin-data` 和镜像 `dpage/pgadmin4:9.18`；不再使用 5050 网页入口。项目 PostgreSQL 及其 `construction-budgeting_postgres-data` 数据卷保留，已启动并验证 healthy、主机 5432 端口可达、sales_app TCP 登录及三张 sales 表存在。用户随后提供的截图已显示桌面 pgAdmin 连接 vente，并执行 Quotes 查询返回列结构；原网页工具宿主机配置目录仍保留但不再使用。
 - 本机凭据交接（2026-09-25）：用户修改 `.env` 后，已通过 ALTER ROLE 同步 PostgreSQL 五个账号，保留原数据卷，重新应用 PostgreSQL 容器配置并同步 pgAdmin 的宿主机密码文件及卷内 `.pgpass`。五账号 TCP 登录、pgAdmin 保存凭据查询 sales 表和 HTTP 200 均通过。SQL Server/RabbitMQ 仍停止，尚未同步其实际账号密码；当前 `.env` 的 SQL Server 管理员密码不满足复杂度要求，启用这两项服务前须单独处理，不能仅重启或假定所有凭据已同步。文档不记录密码值。
 - 桌面 pgAdmin 9.18 连接兼容性：用户遇到空指针 access violation，与上游 Windows GSSAPI 打包问题 #10428 相符。使用安装包自带 Python/psycopg，加入运行库查找路径后，以 `gssencmode=disable` 连接主机 `127.0.0.1:5432/vente`，查询返回 `sales_app / vente`，进程退出码 0。已提供在 GUI 的 Connection Parameters 中添加 `GSS encmode = disable` 的办法；用户后续截图显示界面连接与 Quotes 查询成功，不改数据库认证或 SSL 配置。
 - 阻塞点：当前无阻塞；本次 PostgreSQL 容器 healthy，监听 127.0.0.1:5432，其他两个容器仍停止。接续时重新检查状态。新会话执行 `. ./scripts/Use-Dotnet.ps1`；EF CLI 前另执行 `. ./scripts/Use-SalesDatabase.ps1`，密码不写入文档。
-- 已知限制：已验证初次保存/完整读回，IQuoteRepository 仍无真实实现；Version 已映射为并发令牌，但尚未完成整个聚合的原子并发保存与冲突异常转换。ReadQuotes 使用 AsNoTracking 并显式按 Position 加载行；当前保存钩子只给新增报价分配行顺序，修改既有报价的只读行替换、增删和顺序维护留到仓储。每项目一份报价的数据库唯一约束已验证，项目存在性/配方单位匹配仍未验证。numeric 保留 decimal 精度，任意外部 SQL 写入的超范围/不一致数据不受完整领域保护。业务 API、其他三个宿主、React 与消息尚未实现；应用 Dockerfile 在 T09。
+- 已知限制：EfQuoteRepository 的每次读写使用独立上下文，保存仅支持已有且有效修改的单份报价，整份行快照在事务内替换，写入量与行数成正比；大报价、外部行引用及多聚合事务需重新评估。并发仍以整份报价为单位，失败后须丢弃内存聚合。每项目一份报价的数据库唯一约束已验证，项目存在性/配方单位匹配仍未验证。numeric 保留 decimal 精度，任意外部 SQL 写入的超范围/不一致数据不受完整领域保护。API DI 尚未装配，业务 API、其他三个宿主、React 与消息尚未实现；应用 Dockerfile 在 T09。
 
 ## 已完成准备
 
@@ -50,10 +52,11 @@
 - [ ] T02.2 实现创建项目/报价、添加/删除行、更新数量/售价及查询的 MediatR 用例和 REST API。
 - [x] T02.2a 实现修改数量的 MediatR 命令/处理器与最小仓储契约，使用测试替身验证应用协调；API 与数据库适配器后续实现。
 - [x] T02.2b 实现 GetQuoteQuery/Handler 与只读结果 DTO；验证查询不修改状态或保存，暂不接 HTTP/数据库。
-- [ ] T02.3 接入 EF Core/PostgreSQL、迁移和报价版本；验证保存、重新读取、非法输入与并发冲突。
+- [ ] T02.2c 装配 API 的应用与数据库依赖，提供最小报价 GET 查询；验证真实数据 DTO、缺失 404 与健康检查，写入 HTTP 留到下一小步。
+- [x] T02.3 接入 EF Core/PostgreSQL、迁移和报价版本；验证保存、重新读取、非法输入与并发冲突。
 - [x] T02.3a 先实现 Quote.Version 的内存变化规则：有效输入变化递增，同值无操作和失败不递增；数据库原子比较与冲突响应随后接入。
 - [x] T02.3b 实现最小 SalesDbContext、聚合映射与初始迁移；验证 PostgreSQL 保存后在新上下文读回身份、顺序、值对象、金额及版本。仓储适配器和并发保存另起小步。
-- [ ] T02.3c 实现 EF/PostgreSQL IQuoteRepository，按原版本原子保存聚合，处理只读行替换与顺序；真实数据库验证成功保存、冲突与事务完整性。
+- [x] T02.3c 实现 EF/PostgreSQL IQuoteRepository，按原版本原子保存聚合，处理只读行替换与顺序；真实数据库验证成功保存、冲突与事务完整性。
 
 验收：API 完成一次报价编辑流程，重启后能读取；领域规则测试和必要持久化检查通过。
 
@@ -180,3 +183,7 @@ Kubernetes、云、CI/CD、鉴权、Redis、多实例、自动定价与完整端
 | 2026-09-25 | T01.1 本机凭据修复 | 确认 `.env` 与 PostgreSQL 已存凭据不一致；同步五账号及 pgAdmin 密码文件，`docker compose up -d --wait --wait-timeout 60 postgres`、`docker restart construction-pgadmin` 后验证 TCP 登录；`docker exec --user pgadmin -e PGPASSFILE=/var/lib/pgadmin/.pgpass construction-pgadmin /usr/local/pgsql-17/psql -h postgres -U sales_app -d vente -w -c '\dt sales.*'` 通过，网页 HTTP 200。未修改业务代码、未重跑应用测试 | T02.3c；启用 SQL Server/RabbitMQ 前处理各自凭据 |
 | 2026-09-25 | T01.1 数据库管理工具切换 | 用户改用桌面 pgAdmin；执行 `docker rm construction-pgadmin`、`docker volume rm construction-pgadmin-data`、`docker image rm dpage/pgadmin4:9.18`；保留项目数据卷。`docker compose up -d --wait --wait-timeout 60 postgres` 通过，5432 可达，sales_app TCP 登录及 information_schema 查询三张 sales 表通过；SQL Server/RabbitMQ 保持停止。更新 README；未改业务代码或重跑应用测试 | 桌面 pgAdmin 直连；下一代码任务仍为 T02.3c |
 | 2026-09-25 | T01.1 pgAdmin 连接诊断 | 查证上游 #10428/#10440；通过桌面包 Python/psycopg 设置 `gssencmode=disable` 实测主机 TCP 连接成功，查询身份及数据库通过，退出码 0。README 记录连接参数；未代操作 GUI，未改业务代码或重跑应用测试 | 用户在 Connection Parameters 添加该参数重连；T02.3c 不变 |
+| 2026-09-25 | T02.3c | 推送 T02.3b（f0309f7）；新增 Sales.Infrastructure/Persistence/EfQuoteRepository.cs、持久化测试 QuoteRepositoryTests.cs；工厂提供独立上下文，事务内按原版本更新表头并替换行快照。./scripts/Test-SalesPersistence.ps1 的 locked-mode 还原/build/test 全部通过，0 警告/0 错误，149 项通过（11 项真实 PostgreSQL）；更新 README 与架构说明，无新迁移/依赖，未验收业务 HTTP/消息；本步尚未提交 | T02.2c 最小查询 HTTP 接口与依赖装配 |
+| 2026-09-25 | T02.3c 注释整理 | EfQuoteRepository.cs 全部注释改为中文并补充关键代码块说明；CONTEXT 记录后续中文注释约定。仅注释/文档调整，人工核对与 git diff --check 通过，未重跑测试，未提交或推送 | T02.2c 最小查询 HTTP 接口与依赖装配 |
+| 2026-09-25 | 全库注释中文化 | 翻译 Sales 各层、单元/集成测试、scripts、infra/sqlserver 及 .env.example 的现有英文说明注释；保留工具语法标记。48 个源码/脚本/配置文件的非注释内容核对一致，git diff --check 通过；未重跑业务测试，未提交或推送 | T02.2c 最小查询 HTTP 接口与依赖装配 |
+| 2026-09-25 | 仓储注释精简 | EfQuoteRepository 仅保留 6 条关键步骤短注释，CONTEXT 更新简短注释偏好；非注释内容比对一致，git diff --check 通过；未重跑测试，未提交或推送 | 按执行顺序解释两个方法，下一业务任务仍为 T02.2c |

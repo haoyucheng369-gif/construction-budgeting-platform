@@ -1,7 +1,7 @@
 namespace ConstructionBudgeting.Sales.Domain.Quotations;
 
 /// <summary>
-/// A strictly positive quantity, expressed in the work item's unit of measure.
+/// 严格大于零的工程量，其计量单位由所属工程项指定。
 /// </summary>
 public sealed record Quantity
 {

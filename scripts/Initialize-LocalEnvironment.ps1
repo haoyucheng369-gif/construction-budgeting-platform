@@ -10,7 +10,7 @@ if (Test-Path -LiteralPath $environmentFile) {
 $template = Get-Content -LiteralPath (Join-Path $repositoryRoot '.env.example')
 $lines = foreach ($line in $template) {
     if ($line -match '^([A-Z_]+)=replace_with_local_password$') {
-        # Distinct local passwords; no credentials are printed or committed.
+        # 为各账号生成不同的本地密码；不输出凭据，也不将其提交到版本库。
         '{0}=Cb!{1}' -f $Matches[1], [Guid]::NewGuid().ToString('N')
     }
     else {

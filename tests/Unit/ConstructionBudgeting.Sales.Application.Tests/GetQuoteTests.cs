@@ -181,7 +181,7 @@ public sealed class GetQuoteTests
     private static QuoteLine AddPainting(Quote quote) => quote.AddLine(
         Guid.NewGuid(), "PAINT", "Wall painting", "m2", new Quantity(100m), new Money(20m));
 
-    // Records calls against a supplied aggregate; does not emulate database persistence.
+    // 使用传入的聚合记录仓储调用，不模拟数据库持久化行为。
     private sealed class StubQuoteRepository(Quote? quote) : IQuoteRepository
     {
         public int ReadCalls { get; private set; }
