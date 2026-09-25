@@ -1,8 +1,8 @@
-﻿# Construction Budgeting Platform
+# Construction Budgeting Platform
 
 Construction ERP services for project quotations, resource costing, budget comparison, and margin calculation. Changes to quantities and resource prices propagate between services through an event bus, with real-time updates to the quotation workspace.
 
-**Project status:** Sales service skeleton and local infrastructure are implemented and verified (T01). The domain supports quotation line addition/removal, quantity and price changes, rounded amounts and input versioning. Application use cases change a line quantity with an expected-version check and query a quotation as a detached, read-only result through MediatR. Domain rules and application behavior are tested; repository calls use a test double. Database concurrency control, business endpoints, persistence, the remaining service hosts, messaging integration and the React application are not yet implemented. See the [delivery checklist](docs/TODO.md) for progress and the [six implementation stages](docs/implementation-plan.zh-CN.md) for the roadmap.
+**Project status:** Sales domain rules and MediatR quantity-change/query use cases are implemented. EF Core mappings and an initial PostgreSQL migration now support inserting quotations and reading complete ordered aggregates in a fresh context, preserving amounts and input versions. These operations are verified against Compose PostgreSQL. Application tests still use a repository double: the production repository, aggregate concurrency-save workflow, business HTTP endpoints, remaining service hosts, messaging and React are not yet implemented. See the [delivery checklist](docs/TODO.md) for progress and the [six implementation stages](docs/implementation-plan.zh-CN.md) for the roadmap.
 
 ## Core workflow
 
@@ -82,6 +82,12 @@ Kubernetes, cloud deployment, CI/CD pipelines, authentication/authorization, Red
 
 On this Windows environment the .NET 8 SDK is installed separately at `%LOCALAPPDATA%\Microsoft\dotnet`. The session helper selects it without changing the machine's existing .NET installation. A system installation matching `global.json` works as well.
 
+PostgreSQL runs in Docker; a native PostgreSQL installation or pgAdmin is not required. A database GUI and an IDE are optional for the commands below. An existing native SQL Server installation is not used by the current Sales persistence checks.
+
+To browse Sales tables with Windows desktop pgAdmin, register a server with host `127.0.0.1`, port `5432`, maintenance database `vente`, username `sales_app`, and the `SALES_DB_PASSWORD` value from the local `.env`. Keep the Compose `postgres` service running, then browse `vente > Schemas > sales > Tables`. A separate pgAdmin container is not needed.
+
+For pgAdmin 4 **9.18 on Windows**, a bundled GSSAPI runtime issue can cause `access violation writing 0x0000000000000000` during connection. For this local password-based connection, add `gssencmode=disable` under Connection Parameters (keep the existing SSL setting). This workaround was verified with the installed pgAdmin Python/psycopg client against `127.0.0.1:5432/vente`; a subsequent user-provided screenshot also confirmed a successful GUI connection and quotation-table query. See [upstream issue #10428](https://github.com/pgadmin-org/pgadmin4/issues/10428).
+
 ### Start local infrastructure
 
 From the repository root in PowerShell:
@@ -104,6 +110,27 @@ The environment initializer creates an ignored `.env` with generated local passw
 | RabbitMQ management | `http://127.0.0.1:15672` | `cb_app` |
 
 Passwords are in the corresponding variables in `.env`; administrative credentials are used only for initialization and container checks. SQL Server uses the Developer edition for local development. Published container ports bind to localhost.
+
+### Sales database mapping and persistence checks
+
+For Sales-only work, start PostgreSQL without the other services:
+
+```powershell
+. ./scripts/Use-Dotnet.ps1
+./scripts/Initialize-LocalEnvironment.ps1
+docker compose up -d --wait --wait-timeout 60 postgres
+dotnet tool restore
+dotnet restore ConstructionBudgeting.sln --locked-mode
+. ./scripts/Use-SalesDatabase.ps1
+dotnet ef database update --project src/Services/Sales/ConstructionBudgeting.Sales.Infrastructure
+./scripts/Test-SalesPersistence.ps1
+```
+
+Start Docker Desktop first if its Linux engine is stopped (`docker desktop start` is available in this environment). `Use-SalesDatabase.ps1` sets `ConnectionStrings__Sales` for the current process using the ignored `.env`, targeting `sales_app` at `127.0.0.1:5432/vente` without printing credentials. EF tooling is pinned locally in `.config/dotnet-tools.json`; no global EF installation is required.
+
+The migration creates `sales.Quotes`, `sales.QuoteLines` and migration history. Quantities/prices use PostgreSQL `numeric` without a fixed scale; line amounts and totals retain domain rounding. The schema preserves quote-scoped line IDs, explicit line positions, EUR and the stored version, and enforces one quote per project. Project existence checks and the production repository remain planned.
+
+`Test-SalesPersistence.ps1` restores/builds and runs the full suite with `SALES_PERSISTENCE_TESTS=1`. Database tests apply migrations and remove only their own randomly identified quotations. Ordinary `dotnet test` explicitly skips the five PostgreSQL cases unless that flag is set; the migration-model check runs without a database. The API still exposes only health checks and is not yet wired to this context.
 
 ### Build, verify and run Sales
 

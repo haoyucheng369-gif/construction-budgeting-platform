@@ -93,10 +93,11 @@ SignalR 采用单实例、项目分组；通知后定向重新查询。断线重
 | RabbitMQ | rabbitmq:4.2.9-management-alpine |
 | API 集成测试 | Microsoft.AspNetCore.Mvc.Testing 8.0.31、Microsoft.NET.Test.Sdk 17.14.1、xUnit 2.9.3、runner 3.1.5 |
 | 应用分发 / 测试 DI | MediatR 12.5.0；应用测试使用 Microsoft.Extensions.DependencyInjection 8.0.1 |
+| Sales 持久化 | EF Core / Relational / Design / dotnet-ef 8.0.31；Npgsql.EntityFrameworkCore.PostgreSQL 8.0.11 |
 
 本机原有 SDK 10.0.300 保留；8.0.425 单独安装在 `%LOCALAPPDATA%\Microsoft\dotnet`。`scripts/Use-Dotnet.ps1` 只为当前 PowerShell 会话设置 PATH / DOTNET_ROOT，不修改机器配置。NuGet 使用 packages.lock.json 和 locked-mode 还原。
 
-Sales 使用 Minimal API，绑定 `http://127.0.0.1:5080`，标准 ProblemDetails 错误响应；`/health` 目前仅表示宿主存活，不表示数据库/消息连接就绪。Domain 无外部包；Application 引用 Domain 与 MediatR；Infrastructure 引用 Application；API 引用 Application 和 Infrastructure。应用层已提供 MediatR 注册并在测试中验证实际分发，API 宿主尚未装配业务用例；EF Core/MassTransit 尚未接入。
+Sales 使用 Minimal API，绑定 `http://127.0.0.1:5080`，标准 ProblemDetails 错误响应；`/health` 目前仅表示宿主存活，不表示数据库/消息连接就绪。Domain 无外部包；Application 引用 Domain 与 MediatR；Infrastructure 引用 Application 并持有 EF Core/Npgsql；API 引用 Application 和 Infrastructure。应用层已提供 MediatR 注册并在测试中验证实际分发；Infrastructure 的 EF 映射/迁移已通过 PostgreSQL 测试，API 宿主尚未装配业务用例或数据库，MassTransit 尚未接入。
 
 本次固定 MediatR 12.5.0，使用其 IRequest/IRequestHandler 与内置 DI 注册，满足当前 .NET 8 进程内用例需求，不将最新版升级作为前置工作；版本兼容性和注册方式已核对 [NuGet 包说明](https://www.nuget.org/packages/MediatR/12.5.0) 与 [对应版本源码说明](https://github.com/LuckyPennySoftware/MediatR/blob/v12.5.0/README.md)。应用测试沿用现有 xUnit/Test SDK，仅增加 8.0.1 的 DI 容器包。依赖图在各项目 packages.lock.json 中固定，并验证 locked-mode 还原。
 
@@ -157,7 +158,7 @@ Compositions 同时接收报价输入变化和资源价格变化，独立完成�
 
 ### Quote 的最小聚合入口
 
-Sales.Domain 的 `Quotations/Quote.cs` 以非空 Guid Id 标识报价，以非空 ProjectId 关联项目；创建时允许空行集合，总销售额为 0 EUR。它目前表示草稿报价，不增加审批/合同状态机，也不访问数据库校验项目存在性。每项目仅一份草稿的跨报价唯一性要在应用与持久化步骤实现，单个聚合不能保证全系统唯一。
+Sales.Domain 的 `Quotations/Quote.cs` 以非空 Guid Id 标识报价，以非空 ProjectId 关联项目；创建时允许空行集合，总销售额为 0 EUR。它目前表示草稿报价，不增加审批/合同状态机，也不访问数据库校验项目存在性。单个聚合不能保证每项目仅一份草稿；该跨报价唯一性已由数据库 ProjectId 唯一索引约束，应用层错误转换随后实现。
 
 `AddLine(lineId, workItemCode, description, unit, quantity, salesUnitPrice)` 是添加的统一入口：先检查本报价内行 ID 重复，再在内部构造 QuoteLine，计算新总额，最后将行加入私有集合并更新总额。传入值对象可以安全复用，因为它们不可变；不接收外部构造的 QuoteLine，不把同一个行实例附加到多份报价。QuoteLine 的公开构造仍用于独立规则验证，构造并不等于加入报价。
 
@@ -175,7 +176,7 @@ Sales.Domain 的 `Quotations/Quote.cs` 以非空 Guid Id 标识报价，以非�
 
 修改时构造新 QuoteLine，沿用原行 Id、工程项、说明、单位和销售单价，重新计算并舍入行金额；新总额 = 旧总额 − 旧行已舍入金额 + 新行已舍入金额。先完成全部计算，再替换集合中的对应位置并更新总额。验证或溢出失败时保持原状态；减少数量、零售价、多次修改遵循同一规则。
 
-替换只读行实例保留了外部不可变边界，业务实体身份仍是原行 ID。代价是调用方持有的旧行引用不会自动更新，应使用返回的新行或重读 Quote.Lines；未来 EF Core 映射/跟踪必须考虑替换行为，目前尚未实现。不同报价即使使用同一个行 ID，也不会互相影响。
+替换只读行实例保留了外部不可变边界，业务实体身份仍是原行 ID。代价是调用方持有的旧行引用不会自动更新，应使用返回的新行或重读 Quote.Lines；EF 初次保存/读回映射已实现，修改已持久化行的替换跟踪策略仍待仓储步骤。不同报价即使使用同一个行 ID，也不会互相影响。
 
 本入口是内存业务操作，输入版本遵循下文统一规则，尚无事件或多用户并发控制。测试覆盖数量增减、身份/元数据保留、其他行不变、同值无操作、重复修改后的舍入、零售价、空值/缺失行、行金额与总额溢出及跨报价隔离。
 
@@ -203,7 +204,7 @@ Quote 暴露只读的 `long Version`，新空草稿从 1 开始，内部私有 s
 
 四个编辑入口都先完成校验、金额计算及 `checked(Version + 1)`，然后更新集合、金额和版本。checked 防止 long 到达上限后回绕，版本计算失败在状态修改之前发生。版本由整份报价拥有，不同报价各自递增；这是输入一致性的边界，代价是未来两人修改不同报价行也可能产生整份报价的版本冲突。
 
-当前实现仅跟踪内存输入版本。计划的持久化路径要保存读取时的版本，并在数据库中原子比较后写入新状态；单纯 Version++ 或应用层先查询再比较都不能阻止并发覆盖。持久化恢复须保留已存版本，不能通过重放 AddLine 意外递增。API/消息版本序列化契约、EF 映射及冲突响应留到对应步骤确定。
+当前输入版本已映射为 PostgreSQL bigint，首次保存及读回保留原版本；EF 配置标记为并发令牌。后续仓储仍要保存读取时的版本，并在数据库中原子比较后写入完整聚合；单纯 Version++ 或应用层先查询再比较都不能阻止并发覆盖。读回不重放 AddLine，不意外递增。API/消息版本序列化契约及整个聚合的并发保存/冲突响应尚未实现。
 
 未来 QuoteInputsChanged 的 QuoteVersion 对应此输入版本。资源成本变化、收到成本/预算计算结果不会递增报价输入版本；这些结果按来源版本与 CompositionRevision 判断新旧，避免输入事件循环。上述跨服务路径尚未实现。当前测试覆盖初始值、四个操作递增、同值/失败不变、金额不变但输入变化、改回原值、删除到空及报价间独立。
 
@@ -223,7 +224,7 @@ Money 允许正数、零及负数，因为预计毛利与预算差额可能为�
 
 构造函数保留 decimal 原值，不自动舍入。`RoundToCents()` 显式返回按两位小数、MidpointRounding.AwayFromZero 舍入的新 Money，原对象不变。例如单价 1.005 EUR × 数量 100 得到行金额 100.50 EUR；若先将单价舍入成 1.01，结果会错误地变成 101 EUR。负中点 -1.005 舍入为 -1.01。
 
-这一选择允许 Money 临时表示尚未舍入的单价或中间结果，代价是最终金额的使用方必须在正确时点调用舍入；QuoteLine 负责乘法和行金额舍入，Quote 按第 4 节规则汇总已舍入行金额。Money 只提供金额表示、币种约束、值相等和舍入方法，不提前增加算术运算符或报价行为；数据库精度及输入上限留到持久化步骤确定。decimal 仍受自身范围与精度限制。
+这一选择允许 Money 临时表示尚未舍入的单价或中间结果，代价是最终金额的使用方必须在正确时点调用舍入；QuoteLine 负责乘法和行金额舍入，Quote 按第 4 节规则汇总已舍入行金额。Money 只提供金额表示、币种约束、值相等和舍入方法，不提前增加算术运算符或报价行为；当前 PostgreSQL numeric 保留 decimal 原值，API 输入上限后续确定。decimal 仍受自身范围与精度限制。
 
 测试覆盖原值保留、零/负数、拒绝不支持的币种、正负舍入中点、原对象不变和值相等，并用单价乘数量的例子验证没有提前舍入；QuoteLine 测试进一步验证实际行金额计算。
 
@@ -272,6 +273,28 @@ MediatR 提供进程内用例分发入口，让 API 不依赖具体处理器；�
 本期先复用仓储读取入口，避免为小规模报价建立第二套数据访问接口。代价是读取也要加载完整聚合；未来若有规模或性能依据，可以改成只查询 DTO 所需字段。命令/查询处理器分开即为当前 CQRS 的职责分离，不要求不同数据库或读副本；共享仓储不会把查询变成写用例。
 
 空 ID/null 请求在仓储调用前拒绝，报价不存在抛出 KeyNotFoundException，真实空草稿则返回空行集合和零总额。已取消请求提前终止，CancellationToken 传给读取操作；读取异常向上传递，不伪造空报价。沿用现有 MediatR 程序集注册即可发现新 Handler。测试覆盖字段/顺序、金额精度、空草稿、不改变/保存、返回结果与聚合分离、失败与取消，以及实际查询→修改→查询分发；仍只使用测试仓储，HTTP 与持久化尚未接入。
+
+### 最小 PostgreSQL 持久化映射
+
+Sales.Infrastructure/Persistence 使用 EF Core 8.0.31 与 Npgsql provider 8.0.11，将现有领域类型直接映射到 sales schema。前者与项目 .NET 8 补丁版本保持一致，后者支持 .NET 8 和 EF Core 8；依赖和本地 dotnet-ef 工具固定版本。本步不引入第二套可变数据库模型，也不改 Domain 的公开只读边界。参考 [EF 构造函数绑定](https://learn.microsoft.com/en-us/ef/core/modeling/constructors)、[值转换](https://learn.microsoft.com/en-us/ef/core/modeling/value-conversions) 和 [Npgsql provider 版本依赖](https://www.nuget.org/packages/Npgsql.EntityFrameworkCore.PostgreSQL/8.0.11)。
+
+| 存储 | 对应内容与约束 |
+| --- | --- |
+| sales.Quotes | Id 主键、ProjectId 唯一索引、Version bigint、总销售额、固定 EUR 币种 |
+| sales.QuoteLines | QuoteId + Id 复合主键，所属报价外键，工程项/说明/单位，数量、售价、行金额和 Position |
+| sales.__EFMigrationsHistory | 仅记录 Sales 迁移，使用已有 sales_app 账号及 schema 权限 |
+
+Quantity 经值转换保存 decimal 数值，读回构造 Quantity；Money 保存 Amount 并按本期 EUR 约束重建。报价表额外固定 Currency 为 EUR，数据库 check 拒绝其他币种；不存在独立 Quantity/Money 表。数量、单价、金额都使用不限定 scale 的 numeric，避免数据库静默舍入已有 decimal 值，特别是 1.005 单价不能提前变成 1.01。[PostgreSQL numeric 文档](https://www.postgresql.org/docs/17/datatype-numeric.html) 说明固定 scale 会转换输入精度，而无 scale 的 numeric 不强制小数位。存储保留本期 .NET decimal 范围与精度，已验证极小正数和 decimal.MaxValue；这不表示 C# 可读取任意 PostgreSQL numeric 值。
+
+金额由 Domain 计算并保存；表的基本 check 限定正数量、非负售价/金额、最终金额到分和正版本，不在数据库再建完整报价计算引擎。它们不是任意 SQL 写入的完整领域校验：手工写入过大的数字、不一致的行/总额或其他无效状态仍可能破坏读取。正常写入入口继续由领域与未来仓储约束。
+
+报价行关系通过 `_lines` 字段填充，金额/版本按 EF 映射恢复，不调用 AddLine。关系表没有默认顺序，使用 EF shadow property Position 保存原集合下标；该信息属于持久化，无需给领域实体增加 setter。首次插入报价时上下文分配 Position，QuoteId + Position 有唯一索引；ReadQuotes 使用 AsNoTracking 和有序 Include 完整读回，不能把没有加载行的 Quotes 查询结果作为可编辑完整聚合。Domain 没有新增框架引用或可绕过规则的公开写入口。
+
+代价是 EF 配置需了解私有集合，值转换依赖固定 EUR 约束，修改只读行实例时还需要明确跟踪策略。本步只完成初次保存与完整读回；当前保存钩子只对 Added 报价分配行顺序。替换已跟踪行、增删后的顺序、原子版本比较和异常转换将由下一步 IQuoteRepository 适配器处理，不能把 IsConcurrencyToken 当成整个聚合并发保存已完成。
+
+初始迁移只创建 Sales 两张表及索引/约束，不读取其他服务表；ProjectId 唯一索引落实每项目一份草稿，项目本身存在性仍待应用步骤。SalesDbContextFactory 从 ConnectionStrings__Sales 读取连接；Use-SalesDatabase.ps1 从本机忽略的 .env 设置连接且不显示密码。PostgreSQL 使用 Compose 已有卷，无需本机数据库安装或 pgAdmin。本步未装配 API 数据库依赖，也未启动 SQL Server/RabbitMQ。
+
+验证使用真实 PostgreSQL：首次提交后用新上下文读回多行报价、顺序、身份、金额、精度及已修改版本；空草稿保留版本；相同行 ID 可属于不同报价；重复项目及零数量被数据库拒绝。测试迁移可重复执行，数据只按测试生成的报价 ID 清理，不重置库或 schema。默认跳过需数据库的测试，显式运行 Test-SalesPersistence.ps1 才执行该验收；迁移快照一致性检查不依赖数据库。
 
 ### 为什么跨服务采用事件以及代价
 
@@ -323,3 +346,4 @@ Docker Compose 满足本期的本地服务编排需求。Kubernetes、云与鉴�
 | 2026-09-25 | Quote.Version 使用 long，从 1 开始，每次有效输入变化递增 | 同值和失败不递增，金额未变不代表输入未变；版本计算先于状态修改，数据库原子比较与消息版本接入尚未实现 |
 | 2026-09-25 | 修改数量用例由 MediatR 处理器协调，通过应用层 IQuoteRepository 取得/保存聚合 | Domain 保留金额/版本规则；保存携带原版本，原子比较是待实现的仓储要求；替身与进程内分发验证通过，HTTP/数据库尚未接入 |
 | 2026-09-25 | GetQuoteQuery 复用仓储读取，返回独立 DTO 与只读行集合 | 查询不修改、递增版本或保存；复用整份聚合读取控制规模，专用读取投影按后续需求决定；验证进程内查询→修改→查询 |
+| 2026-09-25 | EF Core 直接映射报价聚合；numeric 保留 decimal，复合行主键与显式 Position 保留归属/顺序 | 真实 PostgreSQL 首次保存/新上下文读回通过；Domain 无 EF 依赖，仓储修改跟踪、聚合原子并发和 API 后续实现 |

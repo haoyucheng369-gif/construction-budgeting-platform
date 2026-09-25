@@ -6,15 +6,18 @@
 
 - 最近更新：2026-09-25。
 - 当前阶段：**T01、T02.1 已完成，T02 整体未完成**；六大阶段总览见 [实施计划](implementation-plan.zh-CN.md)。
-- 当前代码任务：**T02.2b 已完成**；GetQuoteQuery/Handler 与独立只读结果已通过测试，查询不修改状态或保存，MediatR 的查询→修改→查询路径已验证。下一小步为 T02.3b 最小持久化映射与迁移，尚未实现。
+- 当前代码任务：**T02.3b 已完成**；SalesDbContext、值对象转换、行顺序映射与初始迁移已验证，真实 PostgreSQL 首次保存及新上下文读回通过。下一小步为 T02.3c 仓储适配器与原子并发保存，尚未实现。
 - 实施约定：按 [CONTEXT.md](CONTEXT.md) 每次只推进一小步，先讲设计再实现；讨论问题时不自动写业务代码；理由记录在架构决策第 8 节。
 - 架构约定：Sales 保留 Clean 四层；Compositions 在 T04.3 / T05 明确采用六边形端口与适配器，并与 Sales 对照说明；Library、Budget 延续简单分层。六大阶段写入实施计划，完成状态只在本清单维护。
-- 本次验证（2026-09-25，查询报价）：locked-mode 还原通过；编译 0 警告/0 错误；108 项领域、27 项应用（原有 18 + 查询 9）、2 项宿主测试全部通过，共 137 项。仓储使用测试替身；未运行数据库/消息集成检查，未启动 Docker 或独立 API 进程。
+- 本次验证（2026-09-25，持久化映射）：启动 Docker Desktop 和 PostgreSQL；`./scripts/Test-SalesPersistence.ps1` 的 locked-mode 还原、build、test 全部通过，0 警告/0 错误；领域 108、应用 27、宿主 2、持久化 6（含真实 PostgreSQL 5 项）共 143 项通过，无跳过。CLI 重复更新迁移返回数据库已是最新；单独验证默认持久化测试为 1 项通过、5 项明确跳过。未执行 SQL Server/RabbitMQ 检查或业务 HTTP 验收。
 - 历史验证（2026-09-18）：实际 HTTP `/health` 返回 200 Healthy；三个容器健康；PostgreSQL Sales schema 可读写且隔离；SQL Server 基准可读且 UPDATE 被拒绝；RabbitMQ 管理接口认证成功；预算初始化可重复执行。2026-09-24 会话中只读检查 `docker compose ps -a` 时 Docker Linux 引擎不可连接；历史健康状态不代表当前可用。
-- 下一步：T02.3b，先说明 Quote/QuoteLine 与 Money/Quantity 如何映射到 sales schema，明确 decimal 精度、行顺序和版本恢复方式，再实现最小 SalesDbContext、映射与初始迁移，验证真实 PostgreSQL 保存后用新上下文读回。不一次完成整个持久化：IQuoteRepository 适配器、原子版本比较与 API 随后分别接入。开始前重新检查 Docker；数据库不可用时如实保留未完成验收。本期预置预算项目标识为 `11111111-1111-1111-1111-111111111111`。
+- 下一步：T02.3c，先解释如何实现 IQuoteRepository.GetByIdAsync/SaveAsync，再完成 EF/PostgreSQL 仓储适配器；处理只读报价行替换、持久化顺序、按 ExpectedVersion 原子比较并保存整个聚合。验证两个独立上下文读同版本后只有一个保存成功、冲突不留下部分行/金额修改；接入已有修改数量用例做真实仓储验证。API/前端/消息仍另起步骤。本期预置预算项目标识为 `11111111-1111-1111-1111-111111111111`。
 - 环境：Windows；SDK 8.0.425 / 运行时 8.0.31 已在用户目录单独安装；原 SDK 10.0.300 保留；Node 22.22.0、npm 10.9.4；Docker 29.1.3、Compose 2.40.3。
-- 阻塞点：当前应用用例与替身验证无阻塞。新 PowerShell 会话先执行 `. ./scripts/Use-Dotnet.ps1` 选择 SDK；后续需要基础设施时再启动并检查 Docker Desktop。
-- 已知限制：仓储只有接口和测试替身；尚无持久化版本恢复、数据库原子比较、HTTP 冲突响应或 API 的应用层装配。处理器的版本预检查不能防止读取后发生的并发写入；保存失败后须丢弃该工作单元，不复用已修改的内存报价。数量/售价更新替换只读行实例，EF Core 跟踪映射待设计。项目存在性、每项目一份草稿及配方单位匹配未验证；行定位须携带 QuoteId。Money 仅支持 EUR。业务 API、持久化、其他三个宿主、React 页面和服务间消息尚未实现。应用 Dockerfile 在 T09；React 在 T03。
+- 本机数据库查看工具：用户已安装 Windows 桌面版 pgAdmin，连接 `127.0.0.1:5432`、数据库 `vente`、账号 `sales_app`，密码取本机 `.env`。按用户要求已删除旧网页工具容器 `construction-pgadmin`、专属设置卷 `construction-pgadmin-data` 和镜像 `dpage/pgadmin4:9.18`；不再使用 5050 网页入口。项目 PostgreSQL 及其 `construction-budgeting_postgres-data` 数据卷保留，已启动并验证 healthy、主机 5432 端口可达、sales_app TCP 登录及三张 sales 表存在。用户随后提供的截图已显示桌面 pgAdmin 连接 vente，并执行 Quotes 查询返回列结构；原网页工具宿主机配置目录仍保留但不再使用。
+- 本机凭据交接（2026-09-25）：用户修改 `.env` 后，已通过 ALTER ROLE 同步 PostgreSQL 五个账号，保留原数据卷，重新应用 PostgreSQL 容器配置并同步 pgAdmin 的宿主机密码文件及卷内 `.pgpass`。五账号 TCP 登录、pgAdmin 保存凭据查询 sales 表和 HTTP 200 均通过。SQL Server/RabbitMQ 仍停止，尚未同步其实际账号密码；当前 `.env` 的 SQL Server 管理员密码不满足复杂度要求，启用这两项服务前须单独处理，不能仅重启或假定所有凭据已同步。文档不记录密码值。
+- 桌面 pgAdmin 9.18 连接兼容性：用户遇到空指针 access violation，与上游 Windows GSSAPI 打包问题 #10428 相符。使用安装包自带 Python/psycopg，加入运行库查找路径后，以 `gssencmode=disable` 连接主机 `127.0.0.1:5432/vente`，查询返回 `sales_app / vente`，进程退出码 0。已提供在 GUI 的 Connection Parameters 中添加 `GSS encmode = disable` 的办法；用户后续截图显示界面连接与 Quotes 查询成功，不改数据库认证或 SSL 配置。
+- 阻塞点：当前无阻塞；本次 PostgreSQL 容器 healthy，监听 127.0.0.1:5432，其他两个容器仍停止。接续时重新检查状态。新会话执行 `. ./scripts/Use-Dotnet.ps1`；EF CLI 前另执行 `. ./scripts/Use-SalesDatabase.ps1`，密码不写入文档。
+- 已知限制：已验证初次保存/完整读回，IQuoteRepository 仍无真实实现；Version 已映射为并发令牌，但尚未完成整个聚合的原子并发保存与冲突异常转换。ReadQuotes 使用 AsNoTracking 并显式按 Position 加载行；当前保存钩子只给新增报价分配行顺序，修改既有报价的只读行替换、增删和顺序维护留到仓储。每项目一份报价的数据库唯一约束已验证，项目存在性/配方单位匹配仍未验证。numeric 保留 decimal 精度，任意外部 SQL 写入的超范围/不一致数据不受完整领域保护。业务 API、其他三个宿主、React 与消息尚未实现；应用 Dockerfile 在 T09。
 
 ## 已完成准备
 
@@ -49,7 +52,8 @@
 - [x] T02.2b 实现 GetQuoteQuery/Handler 与只读结果 DTO；验证查询不修改状态或保存，暂不接 HTTP/数据库。
 - [ ] T02.3 接入 EF Core/PostgreSQL、迁移和报价版本；验证保存、重新读取、非法输入与并发冲突。
 - [x] T02.3a 先实现 Quote.Version 的内存变化规则：有效输入变化递增，同值无操作和失败不递增；数据库原子比较与冲突响应随后接入。
-- [ ] T02.3b 实现最小 SalesDbContext、聚合映射与初始迁移；验证 PostgreSQL 保存后在新上下文读回身份、顺序、值对象、金额及版本。仓储适配器和并发保存另起小步。
+- [x] T02.3b 实现最小 SalesDbContext、聚合映射与初始迁移；验证 PostgreSQL 保存后在新上下文读回身份、顺序、值对象、金额及版本。仓储适配器和并发保存另起小步。
+- [ ] T02.3c 实现 EF/PostgreSQL IQuoteRepository，按原版本原子保存聚合，处理只读行替换与顺序；真实数据库验证成功保存、冲突与事务完整性。
 
 验收：API 完成一次报价编辑流程，重启后能读取；领域规则测试和必要持久化检查通过。
 
@@ -72,6 +76,8 @@ T02.3a 验证（2026-09-25）：`. ./scripts/Use-Dotnet.ps1` 后执行 `dotnet r
 T02.2a 验证（2026-09-25）：`. ./scripts/Use-Dotnet.ps1` 后运行 `dotnet restore ConstructionBudgeting.sln` 更新新依赖锁文件，再执行 `dotnet restore ConstructionBudgeting.sln --locked-mode`、`dotnet build ConstructionBudgeting.sln --no-restore`、`dotnet test ConstructionBudgeting.sln --no-build --no-restore`，全部通过；编译 0 警告/0 错误，领域 108/108、应用 18/18、宿主 2/2。新增应用测试项目 `tests/Unit/ConstructionBudgeting.Sales.Application.Tests`，验证成功返回领域金额、保存原版本、零价有效修改、同值不保存、过期版本（含同值请求）、非法输入、缺失报价/行、计算溢出、保存冲突/故障传播、取消及 DI/MediatR 分发。数据库原子性、真实存储、HTTP 和 RabbitMQ 尚未验证。
 
 T02.2b 验证（2026-09-25）：`. ./scripts/Use-Dotnet.ps1` 后执行 `dotnet restore ConstructionBudgeting.sln --locked-mode`、`dotnet build ConstructionBudgeting.sln --no-restore`、`dotnet test ConstructionBudgeting.sln --no-build --no-restore` 全部通过；编译 0 警告/0 错误，领域 108/108、应用 27/27、宿主 2/2。新增 `GetQuoteTests.cs` 9 个案例，覆盖身份/行字段/顺序/舍入金额、空报价、不改变聚合或保存、独立只读快照、缺失报价、空 ID/null、取消、读取故障传播，以及 MediatR 查询→修改→查询。未新增依赖，未执行 HTTP 业务、数据库或消息验收。
+
+T02.3b 验证（2026-09-25）：`docker desktop start`、`docker compose up -d --wait --wait-timeout 60 postgres` 成功，容器 healthy。更新新依赖锁文件后，`./scripts/Test-SalesPersistence.ps1` 执行 locked-mode 还原、build、test，全套 143/143 通过。新增 `tests/Integration/ConstructionBudgeting.Sales.Persistence.Tests`：迁移快照检查 1 项、真实 PostgreSQL 5 项，覆盖多行身份/顺序/编辑后版本与金额、空草稿、精细小数及 decimal.MaxValue、跨报价重复行 ID、项目唯一约束、数据库拒绝零数量；随机测试报价在 finally 中按 ID 清理，未删除库或 schema。`dotnet tool restore`、`dotnet ef database update --project src/Services/Sales/ConstructionBudgeting.Sales.Infrastructure --no-build` 通过（先加载 SDK 与 Use-SalesDatabase）；重复更新无待执行迁移。未设置 SALES_PERSISTENCE_TESTS 时，该测试项目 1 项通过、5 项跳过，非数据库验收通过。
 
 ### T03 最小报价页面（第 3 天）
 
@@ -169,3 +175,8 @@ Kubernetes、云、CI/CD、鉴权、Redis、多实例、自动定价与完整端
 | 2026-09-25 | T02.3a | Sales.Domain/Quotations/Quote.cs 增加 Version 及四种编辑的递增规则；tests/Unit/ConstructionBudgeting.Sales.Domain.Tests/QuoteVersionTests.cs 新增 16 项测试，更新架构决策及 README。上述 locked-mode 还原、build、test 通过，0 警告/0 错误，领域 108 + 宿主 2 项通过；未运行基础设施检查 | T02.2a 修改数量的应用命令/处理器与仓储契约 |
 | 2026-09-25 | T02.2a | Sales.Application/Quotations/ChangeQuoteLineQuantity 新增命令、处理器、结果；新增 IQuoteRepository、QuoteConcurrencyException、DependencyInjection.cs，固定 MediatR 12.5.0，加入应用测试项目及锁文件。上述还原/build/test 通过，领域 108 + 应用 18 + 宿主 2；未运行基础设施检查 | T02.2b 查询报价用例，返回 DTO 并验证只读行为 |
 | 2026-09-25 | T02.2b | Sales.Application/Quotations/GetQuote 新增 Query、Handler、GetQuoteResult、QuoteLineDetails；应用测试 GetQuoteTests.cs 新增 9 项，更新架构决策及 README。上述 locked-mode 还原/build/test 通过，领域 108 + 应用 27 + 宿主 2；未运行基础设施检查 | T02.3b 最小 EF Core 映射与迁移，验证真实数据库保存/读回 |
+| 2026-09-25 | T02.3b | Sales.Infrastructure/Persistence 新增上下文、配置、设计时工厂及 InitialSales 迁移；新增本地 EF 工具、Use-SalesDatabase/Test-SalesPersistence 脚本、持久化测试项目和锁文件。真实 PostgreSQL 验证与全套测试 143 项通过，build 0 警告/0 错误；迁移重复执行通过，未测试业务 HTTP/消息 | T02.3c 仓储适配器与整份报价原子并发保存 |
+| 2026-09-25 | T01.1 本机辅助工具 | 安装官方 dpage/pgadmin4:9.18 容器并预置 Sales 连接，绑定本机 5050 端口；HTTP 200、setup.py dump-servers 和容器内 psql 查询 sales 表通过。原生安装因文件访问错误回滚，浏览器控制不可用，未验证界面操作；未改业务代码或重跑应用测试 | 通过 pgAdmin 查看表；下一代码任务仍为 T02.3c |
+| 2026-09-25 | T01.1 本机凭据修复 | 确认 `.env` 与 PostgreSQL 已存凭据不一致；同步五账号及 pgAdmin 密码文件，`docker compose up -d --wait --wait-timeout 60 postgres`、`docker restart construction-pgadmin` 后验证 TCP 登录；`docker exec --user pgadmin -e PGPASSFILE=/var/lib/pgadmin/.pgpass construction-pgadmin /usr/local/pgsql-17/psql -h postgres -U sales_app -d vente -w -c '\dt sales.*'` 通过，网页 HTTP 200。未修改业务代码、未重跑应用测试 | T02.3c；启用 SQL Server/RabbitMQ 前处理各自凭据 |
+| 2026-09-25 | T01.1 数据库管理工具切换 | 用户改用桌面 pgAdmin；执行 `docker rm construction-pgadmin`、`docker volume rm construction-pgadmin-data`、`docker image rm dpage/pgadmin4:9.18`；保留项目数据卷。`docker compose up -d --wait --wait-timeout 60 postgres` 通过，5432 可达，sales_app TCP 登录及 information_schema 查询三张 sales 表通过；SQL Server/RabbitMQ 保持停止。更新 README；未改业务代码或重跑应用测试 | 桌面 pgAdmin 直连；下一代码任务仍为 T02.3c |
+| 2026-09-25 | T01.1 pgAdmin 连接诊断 | 查证上游 #10428/#10440；通过桌面包 Python/psycopg 设置 `gssencmode=disable` 实测主机 TCP 连接成功，查询身份及数据库通过，退出码 0。README 记录连接参数；未代操作 GUI，未改业务代码或重跑应用测试 | 用户在 Connection Parameters 添加该参数重连；T02.3c 不变 |

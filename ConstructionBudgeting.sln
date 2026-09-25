@@ -29,6 +29,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConstructionBudgeting.Sales
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConstructionBudgeting.Sales.Application.Tests", "tests\Unit\ConstructionBudgeting.Sales.Application.Tests\ConstructionBudgeting.Sales.Application.Tests.csproj", "{69519BA1-A720-4EC2-9E08-AA12D484677C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConstructionBudgeting.Sales.Persistence.Tests", "tests\Integration\ConstructionBudgeting.Sales.Persistence.Tests\ConstructionBudgeting.Sales.Persistence.Tests.csproj", "{33A0C837-BAF0-44D5-A8BA-189F0A69F12A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -66,6 +68,10 @@ Global
 		{69519BA1-A720-4EC2-9E08-AA12D484677C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{69519BA1-A720-4EC2-9E08-AA12D484677C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{69519BA1-A720-4EC2-9E08-AA12D484677C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{33A0C837-BAF0-44D5-A8BA-189F0A69F12A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{33A0C837-BAF0-44D5-A8BA-189F0A69F12A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{33A0C837-BAF0-44D5-A8BA-189F0A69F12A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{33A0C837-BAF0-44D5-A8BA-189F0A69F12A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{675A5D7C-AB34-45B5-B064-681B2EBBA9F5} = {F43A0461-7852-45BF-892C-2FD15596BEE2}
@@ -79,5 +85,6 @@ Global
 		{BB9CE191-BA3B-4D0E-95C3-28437E147A00} = {A0F254E0-7F32-4252-A5E2-4852C136DAF5}
 		{AAB0D3B8-5828-4981-BF4F-6366F8747B42} = {BB9CE191-BA3B-4D0E-95C3-28437E147A00}
 		{69519BA1-A720-4EC2-9E08-AA12D484677C} = {BB9CE191-BA3B-4D0E-95C3-28437E147A00}
+		{33A0C837-BAF0-44D5-A8BA-189F0A69F12A} = {72C5C679-164E-45BD-851A-B1A92D3BEFD9}
 	EndGlobalSection
 EndGlobal
