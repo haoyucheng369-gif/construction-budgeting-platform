@@ -31,6 +31,14 @@ This implements the inward dependency rule of Clean Architecture and the ports/a
 
 External database, message-broker and browser contracts must not replace or leak into the domain model. MediatR, EF Core and messaging packages are added when their use cases are introduced, not to otherwise empty layers.
 
+## Quantity-change application use case
+
+`Application/Quotations/ChangeQuoteLineQuantity` contains the command, handler and result DTO. The command carries QuoteId, LineId, decimal Quantity and ExpectedVersion. The handler validates input, loads the quote through `IQuoteRepository`, rejects a mismatched version, calls the domain method and saves effective changes with the original version. Equal quantities skip saving. The result copies domain-calculated amounts and the resulting version; it does not expose the mutable aggregate.
+
+`IQuoteRepository` is an application-owned port. Its future persistence implementation must load a unit-of-work-local aggregate and atomically compare the stored version when saving. The handler's initial comparison alone cannot prevent a write racing with the save. `QuoteConcurrencyException` is also the contract for save-time conflicts. Storage errors propagate; after a failed save the modified in-memory unit of work must be discarded.
+
+`AddSalesApplication()` registers MediatR 12.5.0 and handlers. Tests exercise real `ISender.Send` dispatch with a scoped repository test double. The API has not yet called this registration or exposed the business command; no production repository adapter exists. HTTP routes, error mapping, database atomicity and integration events remain subsequent work.
+
 ## Current verification
 
 The integration test project starts the real ASP.NET Core pipeline in memory. It checks liveness without external dependencies and ProblemDetails for unknown routes. `/health` does not yet check database or broker readiness.
@@ -50,3 +58,5 @@ Sales-price tests cover increases/decreases/zero, negative-price rejection, prec
 Removal tests cover remaining-line identity/order, empty drafts, zero-price lines, invalid IDs, repeated removal, current amounts after edits, rounding, aggregate isolation and rejected edits of removed lines.
 
 Version tests cover initialization, increments across edits, unchanged amounts with changed inputs, no-op changes, validation and amount-overflow failures, repeated removal, reverting to a previous quantity and independent quotations.
+
+`tests/Unit/ConstructionBudgeting.Sales.Application.Tests` references Application and uses a repository test double. It checks quantity-change results, expected-version forwarding, no-op behavior, stale input, missing records, invalid values, domain overflow, save failures, cancellation-token forwarding and DI/MediatR dispatch. These checks do not prove persistence or database concurrency behavior.

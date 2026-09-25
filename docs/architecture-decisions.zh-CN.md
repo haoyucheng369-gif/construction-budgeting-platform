@@ -92,10 +92,13 @@ SignalR 采用单实例、项目分组；通知后定向重新查询。断线重
 | SQL Server | mcr.microsoft.com/mssql/server:2022-CU27-ubuntu-22.04，Developer edition |
 | RabbitMQ | rabbitmq:4.2.9-management-alpine |
 | API 集成测试 | Microsoft.AspNetCore.Mvc.Testing 8.0.31、Microsoft.NET.Test.Sdk 17.14.1、xUnit 2.9.3、runner 3.1.5 |
+| 应用分发 / 测试 DI | MediatR 12.5.0；应用测试使用 Microsoft.Extensions.DependencyInjection 8.0.1 |
 
 本机原有 SDK 10.0.300 保留；8.0.425 单独安装在 `%LOCALAPPDATA%\Microsoft\dotnet`。`scripts/Use-Dotnet.ps1` 只为当前 PowerShell 会话设置 PATH / DOTNET_ROOT，不修改机器配置。NuGet 使用 packages.lock.json 和 locked-mode 还原。
 
-Sales 使用 Minimal API，绑定 `http://127.0.0.1:5080`，标准 ProblemDetails 错误响应；`/health` 目前仅表示宿主存活，不表示数据库/消息连接就绪。Domain 无外部包；Application 引用 Domain；Infrastructure 引用 Application；API 引用 Application 和 Infrastructure。业务包随用例引入，当前尚无 MediatR/EF Core/MassTransit 的运行时集成。
+Sales 使用 Minimal API，绑定 `http://127.0.0.1:5080`，标准 ProblemDetails 错误响应；`/health` 目前仅表示宿主存活，不表示数据库/消息连接就绪。Domain 无外部包；Application 引用 Domain 与 MediatR；Infrastructure 引用 Application；API 引用 Application 和 Infrastructure。应用层已提供 MediatR 注册并在测试中验证实际分发，API 宿主尚未装配业务用例；EF Core/MassTransit 尚未接入。
+
+本次固定 MediatR 12.5.0，使用其 IRequest/IRequestHandler 与内置 DI 注册，满足当前 .NET 8 进程内用例需求，不将最新版升级作为前置工作；版本兼容性和注册方式已核对 [NuGet 包说明](https://www.nuget.org/packages/MediatR/12.5.0) 与 [对应版本源码说明](https://github.com/LuckyPennySoftware/MediatR/blob/v12.5.0/README.md)。应用测试沿用现有 xUnit/Test SDK，仅增加 8.0.1 的 DI 容器包。依赖图在各项目 packages.lock.json 中固定，并验证 locked-mode 还原。
 
 SQL Server 基准表为 `Budget.budget.ProjectBaselines(ProjectId, Amount, Currency)`；种子项目标识 `11111111-1111-1111-1111-111111111111`，预算 1300 EUR。T02/T06 使用相同标识关联项目。只读登录 `budget_reader` 仅获 budget schema 的 SELECT，显式拒绝 DML。
 
@@ -242,6 +245,22 @@ QuoteLine 提供公开构造函数和只读属性，便于独立验证行规则�
 
 MediatR 提供进程内用例分发入口，让 API 不依赖具体处理器；它不提供跨进程投递和故障恢复。RabbitMQ 负责服务之间的消息传递，MassTransit 负责发布、消费及相关配置。二者处理不同的通信边界。
 
+### 首个应用用例：修改报价行数量
+
+`Sales.Application/Quotations/ChangeQuoteLineQuantity` 包含命令、处理器和结果 DTO。以刷漆 100 m² 改为 120 m² 为例，命令表达修改意图，携带 QuoteId、LineId、新数量和 ExpectedVersion；处理器负责取得报价、检查版本、调用领域行为、协调保存与返回结果。Quantity 校验、行金额、总额与版本递增仍由 Domain 负责，处理器不复制计算公式。
+
+`IQuoteRepository` 放在 Application，因为当前需求是应用用例取得/保存 Quote，领域模型本身不需要访问存储。接口仅有 GetByIdAsync 与 SaveAsync，不提前建立通用 CRUD 仓储或独立 UnitOfWork 抽象。未来 Infrastructure 实现接口，依赖方向保持向内；本步只有测试替身。代价是需要维护接口契约和适配器测试，替身验证不能代替真实数据库验证。
+
+处理器在读取前拒绝空标识、非正版本，并通过 Quantity 构造函数验证数量；读取后检查请求版本是否等于报价当前版本，连同值请求也拒绝过期版本。找不到报价/行使用 KeyNotFoundException；版本不匹配使用应用层 QuoteConcurrencyException，携带报价标识和期望版本。未来 API 再把这些异常映射为 HTTP 响应，目前尚未实现错误映射。
+
+有效修改后以“修改前版本”调用 SaveAsync，返回 DTO 前等待保存完成。仓储契约要求在同一个原子操作/事务内比较存储版本并保存聚合，保存时版本冲突（包括读取后报价被删除）抛出 QuoteConcurrencyException。应用层预检查只排除已知过期输入，不能防止读取后发生的竞争；数据库实现与并发验证仍在 T02.3。同值操作不调用保存，返回读取到的结果；此结果仍可能随后过期，不承诺锁定当前数据库状态。
+
+保存失败时异常向上传递，不返回成功结果、不自动重试已修改的聚合，也不声称回滚内存对象。仓储必须按工作单元提供聚合，不能让不同请求共享可变 Quote；失败后丢弃该工作单元，下一次重新读取。CancellationToken 从用例传给读写操作；已取消的请求在读取前终止。
+
+命令结果只包含报价/行标识、数量、行金额、总销售额、币种和版本这些只读标量。金额直接取领域模型；不把可变聚合返回给调用方，也不把此应用结果预先认定为最终 HTTP 契约。`AddSalesApplication()` 注册 MediatR 及处理器，当前测试通过作用域内的 ISender.Send 验证分发。API 尚未调用该注册，也未暴露业务路由。
+
+应用测试覆盖成功与原版本保存、免费行有效修改、同值不保存、过期版本、缺失报价/行、非法输入、领域金额溢出、存储故障/冲突传播、取消与实际分发。本步建立 CQRS 的第一个写用例；读取用例、真实仓储、HTTP 和跨进程消息仍按后续小步骤接入。
+
 ### 为什么跨服务采用事件以及代价
 
 销售报价的保存不应要求预算服务此刻也可用。事件使下游计算能够在输入保存后独立处理，而不是在一次 HTTP 请求中串联等待所有服务。
@@ -290,3 +309,4 @@ Docker Compose 满足本期的本地服务编排需求。Kubernetes、云与鉴�
 | 2026-09-25 | ChangeLineSalesUnitPrice 保留数量和身份，复用非负售价及最终舍入规则 | 同价无操作，原始单价变化即更新；计算失败保持原状态，事件/版本后续实现 |
 | 2026-09-25 | RemoveLine 按最新已舍入行金额更新总额，允许删除至空草稿 | 缺失/空 ID 和重复删除不改变状态；保留报价/项目身份，持久化、事件与版本后续实现 |
 | 2026-09-25 | Quote.Version 使用 long，从 1 开始，每次有效输入变化递增 | 同值和失败不递增，金额未变不代表输入未变；版本计算先于状态修改，数据库原子比较与消息版本接入尚未实现 |
+| 2026-09-25 | 修改数量用例由 MediatR 处理器协调，通过应用层 IQuoteRepository 取得/保存聚合 | Domain 保留金额/版本规则；保存携带原版本，原子比较是待实现的仓储要求；替身与进程内分发验证通过，HTTP/数据库尚未接入 |
