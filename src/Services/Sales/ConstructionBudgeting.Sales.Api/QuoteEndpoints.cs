@@ -22,9 +22,10 @@ public static class QuoteEndpoints
         })
             .WithName("CreateQuote")
             .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict)
             .WithSummary("创建空报价")
-            .WithDescription("每个项目只允许一份报价，重复创建返回 409。当前校验项目 ID 非空，尚未接入项目目录验证其存在性。返回 quoteId 可用于后续添加行。");
+            .WithDescription("先创建或选择项目，并填写其 projectId；项目不存在返回 404，同一项目已有报价返回 409。返回 quoteId 可用于后续添加行。");
 
         quotes.MapGet("/{id:guid}", async (Guid id, ISender sender, CancellationToken cancellationToken) =>
             TypedResults.Ok(await sender.Send(new GetQuoteQuery(id), cancellationToken)))

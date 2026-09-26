@@ -189,6 +189,7 @@ public sealed partial class SalesPersistenceTests
         quote.AddLine(Guid.Parse("00000000-0000-0000-0000-000000000001"), "FLOOR", "Floor installation", "m2",
             new Quantity(2.5m), new Money(19.99m));
         await using var context = CreateContext();
+        AddProjects(context, quote);
         context.Quotes.Add(quote);
         await context.SaveChangesAsync();
         return quote;

@@ -2,7 +2,7 @@
 
 Construction ERP services for project quotations, resource costing, budget comparison, and margin calculation. Changes to quantities and resource prices propagate between services through an event bus, with real-time updates to the quotation workspace.
 
-**Project status:** Sales domain rules, MediatR quantity-change/query use cases, EF Core mappings and an initial PostgreSQL migration are implemented. The PostgreSQL repository reads complete ordered aggregates and atomically saves edited quotations with an expected-version check. Real database tests verify the command/query flow, competing writers and rollback after a mid-save failure. Sales now exposes quotation creation/query, line addition/removal, quantity edits and sales-price edits, with PostgreSQL persistence, HTTP 400/404/409 responses and a Development-only Swagger UI with prefilled examples. Project catalog/existence validation remains pending. Remaining service hosts, messaging and React are not yet implemented. See the [delivery checklist](docs/TODO.md) for progress and the [six implementation stages](docs/implementation-plan.zh-CN.md) for the roadmap.
+**Project status:** Sales now exposes a minimal project catalog (create/list/get) and the draft-quotation workflow (create/query, add/remove lines, change quantities and sales prices). Quote creation requires an existing project; PostgreSQL preserves existing quotation links during the project migration and enforces the relationship and one-quote-per-project rule. Real database tests cover edits, persistence, version conflicts and project selection. Development-only Swagger UI provides request examples. The React workspace, other service hosts, messaging, cost/budget results, margin and SignalR remain planned. See the [delivery checklist](docs/TODO.md) for verified progress and the [six implementation stages](docs/implementation-plan.zh-CN.md) for the roadmap.
 
 ## Core workflow
 
@@ -82,6 +82,14 @@ Kubernetes, cloud deployment, CI/CD pipelines, authentication/authorization, Red
 
 On this Windows environment the .NET 8 SDK is installed separately at `%LOCALAPPDATA%\Microsoft\dotnet`. The session helper selects it without changing the machine's existing .NET installation. A system installation matching `global.json` works as well.
 
+To open the solution in Visual Studio with that local SDK and the Sales database connection, close any existing Visual Studio window and run from the repository root:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Start-VisualStudio.ps1
+```
+
+The launcher passes the SDK location and the ignored `.env` connection to the new Visual Studio process without changing `global.json` or the machine installation. Set `ConstructionBudgeting.Sales.Api` as the startup project, select the `Sales` launch profile and press F5; Swagger is at `http://127.0.0.1:5080/swagger/index.html`. Only one API process can use port 5080 at a time. To debug an already running API, attach Visual Studio to `ConstructionBudgeting.Sales.Api.exe` instead.
+
 PostgreSQL runs in Docker; a native PostgreSQL installation or pgAdmin is not required. A database GUI and an IDE are optional for the commands below. An existing native SQL Server installation is not used by the current Sales persistence checks.
 
 To browse Sales tables with Windows desktop pgAdmin, register a server with host `127.0.0.1`, port `5432`, maintenance database `vente`, username `sales_app`, and the `SALES_DB_PASSWORD` value from the local `.env`. Keep the Compose `postgres` service running, then browse `vente > Schemas > sales > Tables`. A separate pgAdmin container is not needed.
@@ -128,7 +136,7 @@ dotnet ef database update --project src/Services/Sales/ConstructionBudgeting.Sal
 
 Start Docker Desktop first if its Linux engine is stopped (`docker desktop start` is available in this environment). `Use-SalesDatabase.ps1` sets `ConnectionStrings__Sales` for the current process using the ignored `.env`, targeting `sales_app` at `127.0.0.1:5432/vente` without printing credentials. EF tooling is pinned locally in `.config/dotnet-tools.json`; no global EF installation is required.
 
-The migration creates `sales.Quotes`, `sales.QuoteLines` and migration history. Quantities/prices use PostgreSQL `numeric` without a fixed scale; line amounts and totals retain domain rounding. The schema preserves quote-scoped line IDs, explicit line positions, EUR and the stored version, and enforces one quote per project. `EfQuoteRepository` saves existing edited quotes in one transaction, comparing the original version and replacing the complete line snapshot. Each operation owns a fresh context from `IDbContextFactory<SalesDbContext>`; The API registers this factory and repository; project existence checks remain planned. No new migration is needed for the repository.
+The migrations create `sales.Projects`, `sales.Quotes`, `sales.QuoteLines` and migration history. The project migration registers IDs already referenced by stored quotes before adding the foreign key; their generated names identify them as existing linked projects. Quantities/prices use PostgreSQL `numeric` without a fixed scale; line amounts and totals retain domain rounding. The schema preserves quote-scoped line IDs, explicit line positions, EUR and the stored version, and enforces one quote per project. `EfQuoteRepository` saves existing edited quotes in one transaction, comparing the original version and replacing the complete line snapshot. Each operation owns a fresh context from `IDbContextFactory<SalesDbContext>`; the API also registers the project repository and checks project existence before quote creation.
 
 `Test-SalesPersistence.ps1` restores/builds and runs the full suite with `SALES_PERSISTENCE_TESTS=1`. Database tests apply migrations and remove only their own randomly identified quotations. Ordinary `dotnet test` explicitly skips PostgreSQL cases unless that flag is set; the migration-model check runs without a database. The API uses the same repository for quotation creation, queries and all implemented line edits.
 
@@ -149,7 +157,7 @@ dotnet run --no-build --project src/Services/Sales/ConstructionBudgeting.Sales.A
 
 `GET http://127.0.0.1:5080/health` returns `200 Healthy`. This is host liveness, not database/broker readiness. The Sales host connects to PostgreSQL for quotation creation and editing and provides `/swagger` in Development. It has no message-broker integration; `Test-Infrastructure.ps1` verifies those components independently, including schema isolation and rejected SQL Server writes.
 
-Stop the API with Ctrl+C. `docker compose stop` stops the infrastructure and retains its data. The React app and business endpoints have not been created yet.
+Stop a terminal-started API with Ctrl+C. `docker compose stop` stops the infrastructure and retains its data. The React app and cross-service business endpoints have not been created yet.
 
 The Sales projects enforce the inward dependency boundary: API references Application and Infrastructure; Infrastructure references Application; Application references Domain. See [Sales service boundaries](src/Services/Sales/README.md).
 

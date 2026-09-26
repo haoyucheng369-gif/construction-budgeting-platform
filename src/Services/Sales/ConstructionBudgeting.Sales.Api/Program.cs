@@ -1,6 +1,7 @@
 using ConstructionBudgeting.Sales.Api;
 using ConstructionBudgeting.Sales.Application;
 using ConstructionBudgeting.Sales.Application.Quotations;
+using ConstructionBudgeting.Sales.Application.Projects;
 using ConstructionBudgeting.Sales.Infrastructure.Persistence;
 using ConstructionBudgeting.Sales.Api.Swagger;
 using Microsoft.EntityFrameworkCore;
@@ -15,6 +16,7 @@ builder.Services.AddDbContextFactory<SalesDbContext>(options => options.UseNpgsq
     builder.Configuration.GetConnectionString("Sales"),
     postgres => postgres.MigrationsHistoryTable("__EFMigrationsHistory", "sales")));
 builder.Services.AddScoped<IQuoteRepository, EfQuoteRepository>();
+builder.Services.AddScoped<IProjectRepository, EfProjectRepository>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options => options.OperationFilter<SalesExamplesOperationFilter>());
 
@@ -40,6 +42,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapQuoteEndpoints();
+app.MapProjectEndpoints();
 
 // 当前仅检查进程存活；数据库和消息服务的就绪检查随相应功能接入。
 app.MapHealthChecks("/health");

@@ -1,4 +1,5 @@
 using ConstructionBudgeting.Sales.Domain.Quotations;
+using ConstructionBudgeting.Sales.Domain.Projects;
 using Microsoft.EntityFrameworkCore;
 
 namespace ConstructionBudgeting.Sales.Infrastructure.Persistence;
@@ -6,6 +7,7 @@ namespace ConstructionBudgeting.Sales.Infrastructure.Persistence;
 public sealed class SalesDbContext(DbContextOptions<SalesDbContext> options) : DbContext(options)
 {
     public DbSet<Quote> Quotes => Set<Quote>();
+    public DbSet<Project> Projects => Set<Project>();
 
     // 关系表没有默认行顺序；读取时始终加载完整聚合，并显式按保存的顺序排列报价行。
     public IQueryable<Quote> ReadQuotes() => Quotes.AsNoTracking()
@@ -14,6 +16,7 @@ public sealed class SalesDbContext(DbContextOptions<SalesDbContext> options) : D
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema("sales");
+        modelBuilder.ApplyConfiguration(new ProjectConfiguration());
         modelBuilder.ApplyConfiguration(new QuoteConfiguration());
         modelBuilder.ApplyConfiguration(new QuoteLineConfiguration());
     }

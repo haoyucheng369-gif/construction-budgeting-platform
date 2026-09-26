@@ -14,6 +14,7 @@ public sealed class SalesExamplesOperationFilter : IOperationFilter
         {
             parameter.Schema.Default = parameter.Name switch
             {
+                "id" when operation.OperationId == "GetProject" => new OpenApiString(SalesSampleData.ProjectId.ToString()),
                 "id" or "quoteId" => new OpenApiString(SalesSampleData.QuoteId.ToString()),
                 "lineId" => new OpenApiString(operation.OperationId == "RemoveQuoteLine"
                     ? "44444444-4444-4444-4444-444444444444" : "33333333-3333-3333-3333-333333333333"),
@@ -24,6 +25,7 @@ public sealed class SalesExamplesOperationFilter : IOperationFilter
 
         OpenApiObject? example = operation.OperationId switch
         {
+            "CreateProject" => new() { ["name"] = new OpenApiString("巴黎办公楼翻新") },
             "CreateQuote" => new() { ["projectId"] = new OpenApiString("55555555-5555-5555-5555-555555555555") },
             "AddQuoteLine" => new()
             {

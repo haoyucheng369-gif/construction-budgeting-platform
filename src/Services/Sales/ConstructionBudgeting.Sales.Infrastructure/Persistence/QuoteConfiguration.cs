@@ -1,4 +1,5 @@
 using ConstructionBudgeting.Sales.Domain.Quotations;
+using ConstructionBudgeting.Sales.Domain.Projects;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -18,6 +19,8 @@ internal sealed class QuoteConfiguration : IEntityTypeConfiguration<Quote>
         builder.Property(quote => quote.Id).ValueGeneratedNever();
         builder.Property(quote => quote.ProjectId).IsRequired();
         builder.HasIndex(quote => quote.ProjectId).IsUnique();
+        builder.HasOne<Project>().WithMany().HasForeignKey(quote => quote.ProjectId)
+            .OnDelete(DeleteBehavior.Restrict);
         builder.Property(quote => quote.Version).IsConcurrencyToken().ValueGeneratedNever();
         builder.Property(quote => quote.TotalSalesAmount)
             .HasConversion(money => money.Amount, amount => new Money(amount, "EUR"))

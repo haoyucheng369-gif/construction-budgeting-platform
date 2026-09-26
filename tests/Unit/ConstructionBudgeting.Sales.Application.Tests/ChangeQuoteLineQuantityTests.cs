@@ -1,6 +1,7 @@
 using ConstructionBudgeting.Sales.Application;
 using ConstructionBudgeting.Sales.Application.Quotations;
 using ConstructionBudgeting.Sales.Application.Quotations.ChangeQuoteLineQuantity;
+using ConstructionBudgeting.Sales.Application.Projects;
 using ConstructionBudgeting.Sales.Domain.Quotations;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
@@ -202,6 +203,7 @@ public sealed class ChangeQuoteLineQuantityTests
         var services = new ServiceCollection();
         services.AddSalesApplication();
         services.AddScoped<IQuoteRepository>(_ => repository);
+        services.AddScoped<IProjectRepository, UnusedProjectRepository>();
         using var provider = services.BuildServiceProvider(new ServiceProviderOptions
         {
             ValidateScopes = true,

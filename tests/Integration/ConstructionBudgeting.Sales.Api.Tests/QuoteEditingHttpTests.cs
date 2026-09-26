@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using ConstructionBudgeting.Sales.Application.Quotations.AddQuoteLine;
 using ConstructionBudgeting.Sales.Application.Quotations.CreateQuote;
 using ConstructionBudgeting.Sales.Application.Quotations.GetQuote;
+using ConstructionBudgeting.Sales.Domain.Projects;
 using Microsoft.EntityFrameworkCore;
 
 namespace ConstructionBudgeting.Sales.Api.Tests;
@@ -16,6 +17,11 @@ public sealed partial class QuoteHttpTests
         var projectId = Guid.NewGuid();
         try
         {
+            await using (var setup = CreateContext())
+            {
+                setup.Projects.Add(new Project(projectId, "测试项目"));
+                await setup.SaveChangesAsync();
+            }
             await using var factory = CreateFactory();
             using var client = factory.CreateClient();
             var createdResponse = await client.PostAsJsonAsync("/quotes", new { projectId });
@@ -77,6 +83,11 @@ public sealed partial class QuoteHttpTests
         var projectId = Guid.NewGuid();
         try
         {
+            await using (var setup = CreateContext())
+            {
+                setup.Projects.Add(new Project(projectId, "测试项目"));
+                await setup.SaveChangesAsync();
+            }
             await using var factory = CreateFactory();
             using var client = factory.CreateClient();
             var responses = await Task.WhenAll(client.PostAsJsonAsync("/quotes", new { projectId }),
@@ -228,5 +239,6 @@ public sealed partial class QuoteHttpTests
     {
         await using var context = CreateContext();
         await context.Quotes.Where(quote => quote.ProjectId == projectId).ExecuteDeleteAsync();
+        await context.Projects.Where(project => project.Id == projectId).ExecuteDeleteAsync();
     }
 }

@@ -1,4 +1,5 @@
 using ConstructionBudgeting.Sales.Application.Quotations;
+using ConstructionBudgeting.Sales.Application.Projects;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 
@@ -14,6 +15,7 @@ public sealed class SalesExceptionHandler(IProblemDetailsService problemDetails)
         {
             QuoteAlreadyExistsException => (StatusCodes.Status409Conflict, "该项目已存在报价"),
             QuoteConcurrencyException => (StatusCodes.Status409Conflict, "报价已变化，请重新查询后再修改"),
+            ProjectNotFoundException => (StatusCodes.Status404NotFound, "未找到项目"),
             KeyNotFoundException => (StatusCodes.Status404NotFound, "未找到报价或报价行"),
             BadHttpRequestException => (StatusCodes.Status400BadRequest, "请求格式无效"),
             ArgumentException => (StatusCodes.Status400BadRequest, "请求参数无效"),

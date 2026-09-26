@@ -1,4 +1,5 @@
 using ConstructionBudgeting.Sales.Domain.Quotations;
+using ConstructionBudgeting.Sales.Domain.Projects;
 using Microsoft.EntityFrameworkCore;
 
 namespace ConstructionBudgeting.Sales.Infrastructure.Persistence;
@@ -13,6 +14,12 @@ public static class SalesSampleData
     {
         await using var context = await factory.CreateDbContextAsync(cancellationToken);
         await context.Database.MigrateAsync(cancellationToken);
+
+        if (!await context.Projects.AnyAsync(project => project.Id == ProjectId, cancellationToken))
+        {
+            context.Projects.Add(new Project(ProjectId, "示例施工项目"));
+            await context.SaveChangesAsync(cancellationToken);
+        }
 
         // 重复执行不覆盖已有报价，也不重置用户修改。
         var existing = await context.Quotes.AsNoTracking()

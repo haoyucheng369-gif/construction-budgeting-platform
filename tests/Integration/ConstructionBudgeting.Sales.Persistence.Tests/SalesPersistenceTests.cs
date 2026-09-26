@@ -1,4 +1,5 @@
 using ConstructionBudgeting.Sales.Domain.Quotations;
+using ConstructionBudgeting.Sales.Domain.Projects;
 using ConstructionBudgeting.Sales.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -34,6 +35,7 @@ public sealed partial class SalesPersistenceTests
         {
             await using (var write = CreateContext())
             {
+                AddProjects(write, quote);
                 write.Quotes.Add(quote);
                 await write.SaveChangesAsync();
             }
@@ -81,6 +83,7 @@ public sealed partial class SalesPersistenceTests
         {
             await using (var write = CreateContext())
             {
+                AddProjects(write, quote);
                 write.Quotes.Add(quote);
                 await write.SaveChangesAsync();
             }
@@ -108,6 +111,7 @@ public sealed partial class SalesPersistenceTests
         {
             await using (var write = CreateContext())
             {
+                AddProjects(write, first, second);
                 write.Quotes.AddRange(first, second);
                 await write.SaveChangesAsync();
             }
@@ -133,6 +137,7 @@ public sealed partial class SalesPersistenceTests
         {
             await using (var write = CreateContext())
             {
+                AddProjects(write, first);
                 write.Quotes.Add(first);
                 await write.SaveChangesAsync();
             }
@@ -159,6 +164,7 @@ public sealed partial class SalesPersistenceTests
         {
             await using (var write = CreateContext())
             {
+                AddProjects(write, quote);
                 write.Quotes.Add(quote);
                 await write.SaveChangesAsync();
                 var exception = await Assert.ThrowsAsync<PostgresException>(() => write.Database.ExecuteSqlInterpolatedAsync(
@@ -174,6 +180,12 @@ public sealed partial class SalesPersistenceTests
 
     private static SalesDbContext CreateContext() => new SalesDbContextFactory().CreateDbContext([]);
 
+    private static void AddProjects(SalesDbContext context, params Quote[] quotes)
+    {
+        foreach (var projectId in quotes.Select(quote => quote.ProjectId).Distinct())
+            context.Projects.Add(new Project(projectId, "测试项目"));
+    }
+
     private static async Task MigrateAsync()
     {
         await using var context = CreateContext();
@@ -184,7 +196,10 @@ public sealed partial class SalesPersistenceTests
     {
         await using var cleanup = CreateContext();
         // 只清理本测试随机创建的报价 ID，绝不删除整个数据库或 schema。
+        var projectIds = await cleanup.Quotes.Where(quote => quoteIds.Contains(quote.Id))
+            .Select(quote => quote.ProjectId).ToArrayAsync();
         await cleanup.Quotes.Where(quote => quoteIds.Contains(quote.Id)).ExecuteDeleteAsync();
+        await cleanup.Projects.Where(project => projectIds.Contains(project.Id)).ExecuteDeleteAsync();
     }
 }
 

@@ -1,6 +1,6 @@
-# 报价创建与编辑
+# 项目与报价创建、编辑
 
-Sales 提供六个操作：创建报价、查询报价、添加行、修改数量、修改销售单价、删除行。Swagger UI 已预填示例 ID 和请求体，返回值来自 PostgreSQL。
+Sales 提供项目创建、列表、查询，以及六个报价操作：创建报价、查询报价、添加行、修改数量、修改销售单价、删除行。Swagger UI 已预填示例 ID 和请求体，返回值来自 PostgreSQL。
 
 ## 预填参数怎么用
 
@@ -8,8 +8,13 @@ Sales 提供六个操作：创建报价、查询报价、添加行、修改数�
 
 默认值只是 Swagger 表单示例，不是服务器自动补参数。首次初始化后可直接执行；每次成功修改后，使用响应或 GET 中的最新 `version` 替换下一次请求的 `expectedVersion`。保留旧版本会得到 409，这是正常的并发保护。已删除的行要换成仍存在的 `lineId`。
 
+创建新报价时，先执行 `POST /projects`，把返回的 `projectId` 复制到 `POST /quotes`。报价表单里预填的 `55555555-5555-5555-5555-555555555555` 只是占位示例；如果该项目不存在，会返回 404。
+
 | 操作 | 路径 | 成功响应 |
 | --- | --- | --- |
+| 创建项目 | POST /projects | 201，返回项目 ID、名称及 Location |
+| 列出项目 | GET /projects | 200，返回可选择的项目 |
+| 查询项目 | GET /projects/{id} | 200，返回项目 ID、名称 |
 | 创建空报价 | POST /quotes | 201，返回报价 ID、版本 1、零总额及 Location |
 | 查询报价 | GET /quotes/{id} | 200，包含全部报价行和当前版本 |
 | 添加行 | POST /quotes/{quoteId}/lines | 201，返回新行 ID、新总额和新版本 |
@@ -31,7 +36,7 @@ dotnet run --no-build --project src/Services/Sales/ConstructionBudgeting.Sales.A
 dotnet run --no-build --project src/Services/Sales/ConstructionBudgeting.Sales.Api --launch-profile Sales
 ```
 
-`--seed-sample` 显式应用迁移并创建下面的示例报价，完成后退出。重复执行保留已有报价及修改，不重置数量或版本。正常启动不创建数据、不执行迁移；示例身份已被其他报价占用时初始化报错。最后一条命令启动服务，保持这个终端运行，按 Ctrl+C 停止。
+`--seed-sample` 显式应用迁移并创建示例项目、下面的示例报价，完成后退出。重复执行保留已有报价及修改，不重置数量或版本。正常启动不创建数据、不执行迁移；示例身份已被其他报价占用时初始化报错。最后一条命令启动服务，保持这个终端运行，按 Ctrl+C 停止。
 
 打开 [Swagger UI](http://127.0.0.1:5080/swagger/index.html)。Swagger 只在 Development 环境提供，Sales 启动配置已使用该环境。
 
@@ -87,6 +92,9 @@ dotnet run --no-build --project src/Services/Sales/ConstructionBudgeting.Sales.A
 打开 `vente → Schemas → sales → Tables`，或在 Query Tool 执行：
 
 ```sql
+SELECT * FROM sales."Projects"
+WHERE "Id" = '11111111-1111-1111-1111-111111111111';
+
 SELECT * FROM sales."Quotes"
 WHERE "Id" = '22222222-2222-2222-2222-222222222222';
 
@@ -100,24 +108,25 @@ ORDER BY "Position";
 ## 代码对应关系
 
 ```text
-Swagger → Program.cs 的 GET/PATCH
+Swagger → ProjectEndpoints / QuoteEndpoints
         → MediatR → GetQuoteHandler / ChangeQuoteLineQuantityHandler
-        → IQuoteRepository → EfQuoteRepository → PostgreSQL
+        → IProjectRepository / IQuoteRepository → EF 仓储 → PostgreSQL
 ```
 
 PATCH 在处理器内调用 `Quote.ChangeLineQuantity` 完成计算，再保存。HTTP 请求体 `ChangeQuantityRequest` 只有数量和原版本，报价和行 ID 来自 URL；不接受客户端传入计算金额。
 
 ## 从零创建一份报价
 
-1. 在 **POST /quotes** 执行预填的项目 ID `55555555-5555-5555-5555-555555555555`。成功后复制返回的 `quoteId`，初始 `version` 为 1。
-2. 在 **POST /quotes/{quoteId}/lines** 把路径的默认报价 ID 换成刚返回的 ID，将默认请求体中的 `expectedVersion` 改为 1，其余示例值可直接保留。数量 10、售价 20，行金额和总额均为 200，版本变成 2。复制返回的 `lineId`。
-3. 在 **PATCH .../sales-unit-price** 填入该报价和行 ID，保留示例售价 22，将 `expectedVersion` 改为 2。总额变成 220，版本为 3。
-4. 在 **PATCH .../quantity** 使用该报价和行 ID，数量 120、`expectedVersion` 为 3。总额变成 2640，版本为 4。
-5. 在 **DELETE .../lines/{lineId}** 使用同一报价和行 ID，查询参数 `expectedVersion` 填 4。总额变成 0，版本为 5；再次 GET 可以看到空的 `lines`。之后仍可继续添加新行。
+1. 在 **POST /projects** 使用预填的项目名称创建项目；复制返回的 `projectId`。用 **GET /projects** 可以确认它在列表中。
+2. 在 **POST /quotes** 将预填的 `projectId` 换成刚创建的项目 ID。成功后复制返回的 `quoteId`，初始 `version` 为 1。
+3. 在 **POST /quotes/{quoteId}/lines** 把路径的默认报价 ID 换成刚返回的 ID，将默认请求体中的 `expectedVersion` 改为 1，其余示例值可直接保留。数量 10、售价 20，行金额和总额均为 200，版本变成 2。复制返回的 `lineId`。
+4. 在 **PATCH .../sales-unit-price** 填入该报价和行 ID，保留示例售价 22，将 `expectedVersion` 改为 2。总额变成 220，版本为 3。
+5. 在 **PATCH .../quantity** 使用该报价和行 ID，数量 120、`expectedVersion` 为 3。总额变成 2640，版本为 4。
+6. 在 **DELETE .../lines/{lineId}** 使用同一报价和行 ID，查询参数 `expectedVersion` 填 4。总额变成 0，版本为 5；再次 GET 可以看到空的 `lines`。之后仍可继续添加新行。
 
-新报价和行的 ID 由服务器生成，不会自动替换 Swagger 其他表单中的预填 ID，所以从零操作时需要复制到对应位置。POST /quotes 同一个项目只能成功一次，重复提交返回 409；需要另一份报价时换一个新项目 ID。在 PowerShell 中执行 `[guid]::NewGuid()` 可生成一个新 ID。
+新项目、报价和行的 ID 由服务器生成，不会自动替换 Swagger 其他表单中的预填 ID，所以从零操作时需要复制到对应位置。POST /quotes 同一个项目只能成功一次，重复提交返回 409；需要另一份报价时先创建或选择另一个尚无报价的项目。
 
-创建报价目前只要求项目 ID 非空，并保证每个项目最多一份报价；尚未接入项目目录验证其存在性，也不创建项目或预算。预算/成本联动属于后续服务。
+创建报价要求项目已经在 Sales 项目目录中；不存在返回 404。数据库外键和唯一索引分别保证关联项目存在、每个项目最多一份报价。项目目录当前只管理 ID 和名称，不创建预算；预算/成本联动属于后续服务。迁移对已有报价的项目 ID 使用“已有关联项目 + ID”占位名称，保留原报价数据。
 
 ## 添加行、修改售价和删除的输入边界
 

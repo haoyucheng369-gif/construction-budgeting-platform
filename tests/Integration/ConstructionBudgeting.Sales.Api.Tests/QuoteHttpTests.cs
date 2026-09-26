@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using ConstructionBudgeting.Sales.Application.Quotations.GetQuote;
 using ConstructionBudgeting.Sales.Domain.Quotations;
+using ConstructionBudgeting.Sales.Domain.Projects;
 using ConstructionBudgeting.Sales.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -21,6 +22,9 @@ public sealed partial class QuoteHttpTests
         Assert.Contains("swagger-ui", html);
         using var document = JsonDocument.Parse(await client.GetStringAsync("/swagger/v1/swagger.json"));
         var paths = document.RootElement.GetProperty("paths");
+        Assert.True(paths.GetProperty("/projects").TryGetProperty("get", out _));
+        Assert.True(paths.GetProperty("/projects").TryGetProperty("post", out _));
+        Assert.True(paths.GetProperty("/projects/{id}").TryGetProperty("get", out _));
         Assert.True(paths.GetProperty("/quotes/{id}").GetProperty("get").GetProperty("responses").TryGetProperty("200", out _));
         var edit = paths.GetProperty("/quotes/{quoteId}/lines/{lineId}/quantity").GetProperty("patch");
         Assert.True(edit.GetProperty("responses").TryGetProperty("409", out _));
@@ -139,6 +143,7 @@ public sealed partial class QuoteHttpTests
         var quote = new Quote(Guid.NewGuid(), Guid.NewGuid());
         quote.AddLine(Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff"), "PAINT", "墙面涂装", "m2", new Quantity(100m), new Money(20m));
         quote.AddLine(Guid.Parse("00000000-0000-0000-0000-000000000001"), "FLOOR", "地板铺设", "m2", new Quantity(2.5m), new Money(19.99m));
+        context.Projects.Add(new Project(quote.ProjectId, "测试项目"));
         context.Quotes.Add(quote);
         await context.SaveChangesAsync();
         return quote;
@@ -148,7 +153,11 @@ public sealed partial class QuoteHttpTests
     {
         await using var context = CreateContext();
         // 只清理测试自己的随机报价，保留手动操作的示例报价。
+        var projectId = await context.Quotes.Where(quote => quote.Id == quoteId)
+            .Select(quote => quote.ProjectId).SingleOrDefaultAsync();
         await context.Quotes.Where(quote => quote.Id == quoteId).ExecuteDeleteAsync();
+        if (projectId != Guid.Empty)
+            await context.Projects.Where(project => project.Id == projectId).ExecuteDeleteAsync();
     }
 
     private static async Task AssertProblemAsync(HttpResponseMessage response, HttpStatusCode status)

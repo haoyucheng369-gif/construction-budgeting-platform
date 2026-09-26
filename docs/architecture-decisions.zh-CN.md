@@ -292,7 +292,7 @@ Quantity 经值转换保存 decimal 数值，读回构造 Quantity；Money 保�
 
 代价是 EF 配置需了解私有集合，值转换依赖固定 EUR 约束，修改只读行实例时需要明确跟踪策略。上下文保存钩子只对 Added 报价分配行顺序；已有报价的修改、顺序和原子并发保存由以下仓储适配器负责，不能仅依赖 IsConcurrencyToken。
 
-初始迁移只创建 Sales 两张表及索引/约束，不读取其他服务表；ProjectId 唯一索引落实每项目一份草稿，项目本身存在性仍待应用步骤。SalesDbContextFactory 从 ConnectionStrings__Sales 读取连接；Use-SalesDatabase.ps1 从本机忽略的 .env 设置连接且不显示密码。PostgreSQL 使用 Compose 已有卷，无需本机数据库安装或 pgAdmin。映射步骤未装配 API 数据库依赖；T02.2c 已完成装配，仍未启动 SQL Server/RabbitMQ。
+初始迁移只创建 Sales 报价两张表及索引/约束，不读取其他服务表；ProjectId 唯一索引落实每项目一份草稿。T02.2h 的后续迁移增加项目表、历史关联补齐及外键，应用用例也验证项目存在性。SalesDbContextFactory 从 ConnectionStrings__Sales 读取连接；Use-SalesDatabase.ps1 从本机忽略的 .env 设置连接且不显示密码。PostgreSQL 使用 Compose 已有卷，无需本机数据库安装或 pgAdmin。T02.2c 已完成 API 数据库装配；SQL Server/RabbitMQ 仍未接入 Sales 宿主。
 
 验证使用真实 PostgreSQL：首次提交后用新上下文读回多行报价、顺序、身份、金额、精度及已修改版本；空草稿保留版本；相同行 ID 可属于不同报价；重复项目及零数量被数据库拒绝。测试迁移可重复执行，数据只按测试生成的报价 ID 清理，不重置库或 schema。默认跳过需数据库的测试，显式运行 Test-SalesPersistence.ps1 才执行该验收；迁移快照一致性检查不依赖数据库。
 
@@ -322,13 +322,19 @@ Swagger 使用固定版本 Swashbuckle.AspNetCore 9.0.6，支持当前 .NET 8，
 
 本批按用户要求一次补齐 Swagger 可操作的 Sales 报价功能：创建、查询、添加行、修改数量、修改销售单价、删除行。保留原领域规则，每个新增操作通过独立 Command/Handler/Result 接入；路由移到 QuoteEndpoints，Program 负责装配。没有引入通用 CRUD 基类、新框架、表结构或消息功能。
 
-创建命令接收非空 ProjectId，服务器生成报价 ID，创建版本 1、零金额、空行集合。当前 ProjectId 只作为外部项目关联标识，不假定项目真实存在，也不以“是否有预算”代替项目存在性；项目目录仍待实现。IQuoteRepository 增加 AddAsync，由 EF 插入聚合。每项目一份报价依赖已存在的 IX_Quotes_ProjectId 唯一索引；仅该索引的唯一冲突转换成 QuoteAlreadyExistsException/HTTP 409，其他存储错误继续传播。不能只先查再插，因为两个请求可能同时通过查询。
+创建命令接收非空 ProjectId，服务器生成报价 ID，创建版本 1、零金额、空行集合。T02.2d 时 ProjectId 只作为外部关联标识；T02.2h 已补上 Sales 项目目录和关联校验，不以“是否有预算”代替项目存在性。IQuoteRepository 的 AddAsync 由 EF 插入聚合。每项目一份报价依赖 IX_Quotes_ProjectId 唯一索引；仅该索引的唯一冲突转换成 QuoteAlreadyExistsException/HTTP 409，其他存储错误继续传播。不能只先查再插，因为两个请求可能同时通过查询。
 
 添加行由服务器生成行 ID，经 Quote.AddLine 校验字段并计算；删除与改价沿用 RemoveLine、ChangeLineSalesUnitPrice。所有已有报价修改都携带 ExpectedVersion，保存原版本检查沿用 EfQuoteRepository；相同售价跳过保存，但仍先拒绝过期版本。售价 0 合法，负数非法；HTTP 必须显式提供 salesUnitPrice，防止字段遗漏被当成零价。删除版本从查询参数传入，成功返回新总额/版本；允许删到空报价。
 
 创建报价与添加行返回 201，Location 指向完整报价查询；其他编辑返回 200。Swagger OperationFilter 预填示例路径和请求体，代码中的示例不成为服务器默认值。编辑示例以初始报价版本 3 为基础，成功修改后用户必须换成最新版本；新建报价/行的 ID 需复制到后续表单，避免假装 Swagger 自动串联流程或自动绕过并发控制。
 
 真实 HTTP/数据库验收覆盖创建→添加两行→改价→改量→删除到空→再次添加→新宿主读回；同一项目两个创建请求只有一个成功，两次同版本添加只有一个成功；字段遗漏、非法输入、数据缺失与过期版本不写入部分状态。Swagger 文档校验六个操作与示例值。代码注释保持简短中文，详细操作见手动指南。
+
+### 最小项目目录与报价关联（T02.2h）
+
+Sales 项目目录仅保存 `Project.Id` 和名称，提供创建、列表和按 ID 查询；不引入独立项目服务、项目审批或预算规则。`Quote` 仍只持有 `ProjectId`，不把项目名称复制进报价聚合。创建报价前由应用用例通过 `IProjectRepository.ExistsAsync` 检查项目是否存在：不存在返回 404，同一项目已有报价仍由唯一索引裁决为 409。列表/创建/查询分别走 MediatR 查询或命令，EF 仓储是应用端口的实现。
+
+`sales.Projects` 与 `sales.Quotes` 之间增加限制删除的外键，防止绕开 HTTP 直接写入孤立报价。迁移先把已有报价引用的项目 ID 注册到项目表，再建立外键；因历史数据没有名称，使用明确的“已有关联项目 + ID”占位名称，示例项目使用固定名称，不猜测真实业务名称。当前没有项目删除/重命名入口，也不以 SQL Server 中是否有预算判断项目存在性。这个目录只为报价创建和后续 React 项目选择提供最小上下文；成本、预算和毛利仍由后续阶段接入。
 
 ### 为什么跨服务采用事件以及代价
 
@@ -386,3 +392,4 @@ Docker Compose 满足本期的本地服务编排需求。Kubernetes、云与鉴�
 | 2026-09-25 | T02.2c 装配 GET/PATCH、Swagger 与统一 400/404/409 响应，增加显式示例初始化 | HTTP 复用已有领域/用例/仓储；示例重复初始化保留修改；Swashbuckle 固定 9.0.6；Windows PowerShell 5.1 脚本编码统一 UTF-8 BOM |
 
 | 2026-09-25 | T02.2d–T02.2g 补齐六个报价操作及 Swagger 示例 | 复用领域计算/聚合版本；数据库唯一索引裁决重复创建，项目 ID 暂为外部引用；不扩展项目管理或其他服务，不增加依赖和迁移 |
+| 2026-09-26 | T02.2h 增加 Sales 最小项目目录和报价外键 | 先为旧报价补项目记录，应用层校验项目存在，数据库约束防止孤立报价；项目仅含 ID/名称，不承担预算或审批 |
