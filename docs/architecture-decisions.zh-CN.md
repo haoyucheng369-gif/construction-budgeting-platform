@@ -86,7 +86,7 @@ SignalR 采用单实例、项目分组；通知后定向重新查询。断线重
 | 组件 | 版本 / 选择 |
 | --- | --- |
 | .NET SDK / 运行时 | 8.0.425 / 8.0.31；目标 net8.0，global.json 允许同 feature band 的补丁 |
-| Node / npm | 22.22.0 / 10.9.4；React 依赖在 T03 引入 |
+| Node / npm | 22.22.0 / 10.9.4；React 19.3.0、React Query 5.104.0、Vite 8.3.1、TypeScript 5.9.3 在 T03 引入，并以 package-lock.json 固定依赖图 |
 | Docker / Compose | 本机 29.1.3 / 2.40.3，Linux 容器 |
 | PostgreSQL | postgres:17.11-alpine |
 | SQL Server | mcr.microsoft.com/mssql/server:2022-CU27-ubuntu-22.04，Developer edition |
@@ -359,6 +359,8 @@ PostgreSQL 用 schema 隔离数据所有权，是保留两库同时控制部署�
 报价、成本和毛利的规则集中在后端，可避免两套算法在舍入、边界条件和版本方面发生分歧。React Query 管理远端数据缓存，SignalR 通知哪些数据需要刷新；两者都不成为最终金额的依据。
 
 这样会牺牲即时本地计算反馈，所以用保存中、计算中、完成/失败状态说明实际进度。先保证结果一致，暂不增加前端计算引擎。
+
+T03 第一小步由 `frontend/src/api/projects.ts` 封装项目 HTTP 请求，React Query 缓存服务器项目列表，组件只保留当前选择的项目 ID。Vite 开发代理将 `/api` 转到本机 Sales API，避免为本地开发引入后端 CORS 配置；正式部署如何转发 API 仍属于 T09。选择状态目前刷新即清空，报价读取与编辑尚未接入。
 
 ### 为什么先做宿主和环境检查
 

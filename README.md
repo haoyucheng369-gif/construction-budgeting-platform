@@ -2,7 +2,7 @@
 
 Construction ERP services for project quotations, resource costing, budget comparison, and margin calculation. Changes to quantities and resource prices propagate between services through an event bus, with real-time updates to the quotation workspace.
 
-**Project status:** Sales now exposes a minimal project catalog (create/list/get) and the draft-quotation workflow (create/query, add/remove lines, change quantities and sales prices). Quote creation requires an existing project; PostgreSQL preserves existing quotation links during the project migration and enforces the relationship and one-quote-per-project rule. Real database tests cover edits, persistence, version conflicts and project selection. Development-only Swagger UI provides request examples. The React workspace, other service hosts, messaging, cost/budget results, margin and SignalR remain planned. See the [delivery checklist](docs/TODO.md) for verified progress and the [six implementation stages](docs/implementation-plan.zh-CN.md) for the roadmap.
+**Project status:** Sales exposes a minimal project catalog (create/list/get) and the draft-quotation workflow (create/query, add/remove lines, change quantities and sales prices). Quote creation requires an existing project; PostgreSQL preserves existing quotation links during the project migration and enforces the relationship and one-quote-per-project rule. Real database tests cover edits, persistence, version conflicts and project selection. Development-only Swagger UI provides request examples. The React application currently lists and selects projects from the Sales API; quotation reading and editing in the browser, other service hosts, messaging, cost/budget results, margin and SignalR remain planned. See the [delivery checklist](docs/TODO.md) for verified progress and the [six implementation stages](docs/implementation-plan.zh-CN.md) for the roadmap.
 
 ## Core workflow
 
@@ -78,7 +78,7 @@ Kubernetes, cloud deployment, CI/CD pipelines, authentication/authorization, Red
 
 - .NET SDK 8.0.425 (pinned in `global.json`); the projects target `net8.0`.
 - Docker Desktop with the Linux engine running and Docker Compose v2.
-- Node 22.22.0 / npm 10.9.4 for the upcoming React application; Node is pinned in `.node-version`.
+- Node 22.22.0 / npm 10.9.4 for the React application; Node is pinned in `.node-version`.
 
 On this Windows environment the .NET 8 SDK is installed separately at `%LOCALAPPDATA%\Microsoft\dotnet`. The session helper selects it without changing the machine's existing .NET installation. A system installation matching `global.json` works as well.
 
@@ -144,6 +144,18 @@ The migrations create `sales.Projects`, `sales.Quotes`, `sales.QuoteLines` and m
 
 Follow the [step-by-step Swagger and pgAdmin walkthrough](docs/sales-api-walkthrough.zh-CN.md) to use prefilled examples or create a quote from scratch, add lines, change quantities/prices, delete lines and observe stale-version conflicts. The sample initializer runs only with the explicit Development command `--seed-sample`; repeat runs preserve existing edits.
 
+### Run the project selector
+
+Start the Sales API on `http://127.0.0.1:5080` using the command below or the Visual Studio launch profile. In a second terminal, run:
+
+```powershell
+cd frontend
+npm ci
+npm run dev
+```
+
+Open `http://127.0.0.1:5173/`. The page reads `GET /projects` through the Vite development proxy and lets you select a project. The selection is local page state and resets on refresh. Vite runs on port 5173; the proxy forwards `/api/*` requests to the Sales API on port 5080. The current page does not read or edit quotations. `npm run build` runs TypeScript checking and produces the production assets in `frontend/dist`.
+
 ### Build, verify and run Sales
 
 ```powershell
@@ -157,7 +169,7 @@ dotnet run --no-build --project src/Services/Sales/ConstructionBudgeting.Sales.A
 
 `GET http://127.0.0.1:5080/health` returns `200 Healthy`. This is host liveness, not database/broker readiness. The Sales host connects to PostgreSQL for quotation creation and editing and provides `/swagger` in Development. It has no message-broker integration; `Test-Infrastructure.ps1` verifies those components independently, including schema isolation and rejected SQL Server writes.
 
-Stop a terminal-started API with Ctrl+C. `docker compose stop` stops the infrastructure and retains its data. The React app and cross-service business endpoints have not been created yet.
+Stop a terminal-started API or Vite server with Ctrl+C. `docker compose stop` stops the infrastructure and retains its data. The quotation browser workspace and cross-service business endpoints have not been created yet.
 
 The Sales projects enforce the inward dependency boundary: API references Application and Infrastructure; Infrastructure references Application; Application references Domain. See [Sales service boundaries](src/Services/Sales/README.md).
 
