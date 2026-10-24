@@ -4,6 +4,7 @@ using ConstructionBudgeting.Sales.Application.Quotations.ChangeQuoteLineQuantity
 using ConstructionBudgeting.Sales.Application.Quotations.GetQuote;
 using ConstructionBudgeting.Sales.Application.Projects;
 using ConstructionBudgeting.Sales.Domain.Quotations;
+using ConstructionBudgeting.Sales.Domain.Projects;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -18,7 +19,7 @@ public sealed class GetQuoteTests
         AddPainting(quote);
         var repository = new StubQuoteRepository(quote);
 
-        var result = await new GetQuoteByProjectHandler(repository)
+        var result = await new GetQuoteByProjectHandler(repository, new StubProjectRepository(false))
             .Handle(new(quote.ProjectId), CancellationToken.None);
 
         Assert.NotNull(result);
@@ -35,10 +36,23 @@ public sealed class GetQuoteTests
     {
         var repository = new StubQuoteRepository(null);
 
-        var result = await new GetQuoteByProjectHandler(repository)
+        var result = await new GetQuoteByProjectHandler(repository, new StubProjectRepository(true))
             .Handle(new(Guid.NewGuid()), CancellationToken.None);
 
         Assert.Null(result);
+        Assert.Equal(1, repository.ProjectReadCalls);
+    }
+
+    [Fact]
+    public async Task Query_by_project_rejects_a_missing_project()
+    {
+        var repository = new StubQuoteRepository(null);
+        var projectId = Guid.NewGuid();
+
+        await Assert.ThrowsAsync<ProjectNotFoundException>(() =>
+            new GetQuoteByProjectHandler(repository, new StubProjectRepository(false))
+                .Handle(new(projectId), CancellationToken.None));
+
         Assert.Equal(1, repository.ProjectReadCalls);
     }
 
@@ -48,7 +62,8 @@ public sealed class GetQuoteTests
         var repository = new StubQuoteRepository(null);
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            new GetQuoteByProjectHandler(repository).Handle(new(Guid.Empty), CancellationToken.None));
+            new GetQuoteByProjectHandler(repository, new StubProjectRepository(true))
+                .Handle(new(Guid.Empty), CancellationToken.None));
 
         Assert.Equal(0, repository.ProjectReadCalls);
     }
@@ -224,6 +239,14 @@ public sealed class GetQuoteTests
 
     private static QuoteLine AddPainting(Quote quote) => quote.AddLine(
         Guid.NewGuid(), "PAINT", "Wall painting", "m2", new Quantity(100m), new Money(20m));
+
+    private sealed class StubProjectRepository(bool exists) : IProjectRepository
+    {
+        public Task AddAsync(Project project, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<Project?> GetByIdAsync(Guid projectId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<Project>> ListAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> ExistsAsync(Guid projectId, CancellationToken cancellationToken) => Task.FromResult(exists);
+    }
 
     // 使用传入的聚合记录仓储调用，不模拟数据库持久化行为。
     private sealed class StubQuoteRepository(Quote? quote) : IQuoteRepository

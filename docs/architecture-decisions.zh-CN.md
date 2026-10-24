@@ -97,7 +97,7 @@ SignalR 采用单实例、项目分组；通知后定向重新查询。断线重
 
 本机原有 SDK 10.0.300 保留；8.0.425 单独安装在 `%LOCALAPPDATA%\Microsoft\dotnet`。`scripts/Use-Dotnet.ps1` 只为当前 PowerShell 会话设置 PATH / DOTNET_ROOT，不修改机器配置。NuGet 使用 packages.lock.json 和 locked-mode 还原。
 
-Sales 使用 Minimal API，绑定 `http://127.0.0.1:5080`，标准 ProblemDetails 错误响应；`/health` 目前仅表示宿主存活，不表示数据库/消息连接就绪。Domain 无外部包；Application 引用 Domain 与 MediatR；Infrastructure 引用 Application 并持有 EF Core/Npgsql；API 引用 Application 和 Infrastructure。应用层已提供 MediatR 注册并在测试中验证实际分发；Infrastructure 的 EF 映射/迁移已通过 PostgreSQL 测试，API 宿主已装配报价用例、数据库与 Swagger，MassTransit 尚未接入。
+Sales 业务 HTTP 接口使用 ASP.NET Core Controller，绑定 `http://127.0.0.1:5080`，标准 ProblemDetails 错误响应；`/health` 仍使用框架健康检查映射，目前仅表示宿主存活，不表示数据库/消息连接就绪。Domain 无外部包；Application 引用 Domain 与 MediatR；Infrastructure 引用 Application 并持有 EF Core/Npgsql；API 引用 Application 和 Infrastructure。应用层已提供 MediatR 注册并在测试中验证实际分发；Infrastructure 的 EF 映射/迁移已通过 PostgreSQL 测试，API 宿主已装配报价用例、数据库与 Swagger，MassTransit 尚未接入。
 
 本次固定 MediatR 12.5.0，使用其 IRequest/IRequestHandler 与内置 DI 注册，满足当前 .NET 8 进程内用例需求，不将最新版升级作为前置工作；版本兼容性和注册方式已核对 [NuGet 包说明](https://www.nuget.org/packages/MediatR/12.5.0) 与 [对应版本源码说明](https://github.com/LuckyPennySoftware/MediatR/blob/v12.5.0/README.md)。应用测试沿用现有 xUnit/Test SDK，仅增加 8.0.1 的 DI 容器包。依赖图在各项目 packages.lock.json 中固定，并验证 locked-mode 还原。
 
@@ -320,7 +320,7 @@ Swagger 使用固定版本 Swashbuckle.AspNetCore 9.0.6，支持当前 .NET 8，
 
 ### 补齐报价创建与行编辑（T02.2d–T02.2g）
 
-本批按用户要求一次补齐 Swagger 可操作的 Sales 报价功能：创建、查询、添加行、修改数量、修改销售单价、删除行。保留原领域规则，每个新增操作通过独立 Command/Handler/Result 接入；路由移到 QuoteEndpoints，Program 负责装配。没有引入通用 CRUD 基类、新框架、表结构或消息功能。
+T02.2d–T02.2g 补齐 Swagger 可操作的 Sales 报价功能：创建、查询、添加行、修改数量、修改销售单价、删除行。保留原领域规则，每个新增操作通过独立 Command/Handler/Result 接入。当时路由集中在 QuoteEndpoints；T03.1c 已将业务路由迁移到分文件 Controller，Program 只负责装配。没有引入通用 CRUD 基类、新框架、表结构或消息功能。
 
 创建命令接收非空 ProjectId，服务器生成报价 ID，创建版本 1、零金额、空行集合。T02.2d 时 ProjectId 只作为外部关联标识；T02.2h 已补上 Sales 项目目录和关联校验，不以“是否有预算”代替项目存在性。IQuoteRepository 的 AddAsync 由 EF 插入聚合。每项目一份报价依赖 IX_Quotes_ProjectId 唯一索引；仅该索引的唯一冲突转换成 QuoteAlreadyExistsException/HTTP 409，其他存储错误继续传播。不能只先查再插，因为两个请求可能同时通过查询。
 
@@ -362,7 +362,13 @@ PostgreSQL 用 schema 隔离数据所有权，是保留两库同时控制部署�
 
 T03 第一小步由 `frontend/src/api/projects.ts` 封装项目 HTTP 请求，React Query 缓存服务器项目列表，组件只保留当前选择的项目 ID。Vite 开发代理将 `/api` 转到本机 Sales API，避免为本地开发引入后端 CORS 配置；正式部署如何转发 API 仍属于 T09。选择状态目前刷新即清空，报价读取与编辑尚未接入。
 
-T03 第二小步按选中的 ProjectId 查询其唯一草稿报价。Sales 的 `IQuoteRepository` 新增按项目读取，两个查询处理器复用同一个只读结果快照；不存在报价返回 HTTP 204，前端展示空状态，其他非成功响应展示错误。React Query 的报价缓存键包含 ProjectId，切换项目即切换查询。此查询把“不存在项目”和“存在项目但未创建报价”都视为没有匹配报价；页面的 ProjectId 来自已有项目列表，若以后提供任意 ID 的公开查询入口，再补项目存在性区分。页面只格式化服务器金额，尚不提供编辑。
+T03 第二小步按选中的 ProjectId 查询其唯一草稿报价。Sales 的 `IQuoteRepository` 按项目读取，两个查询处理器复用同一个只读结果快照；React Query 的报价缓存键包含 ProjectId，切换项目即切换查询。T03.1c 将公开契约明确为：有报价返回 200，项目存在但无报价返回 204，项目不存在返回 404。报价缺失时，应用查询用例通过 `IProjectRepository` 判断项目是否存在；报价存在时依赖数据库外键保证项目关联。前端的 ProjectId 来自项目列表，204 展示空状态，404 和其他失败显示错误。页面只格式化服务器金额，尚不提供编辑。
+
+### 为什么业务 HTTP 入口使用 Controller（T03.1c）
+
+Sales 的报价与项目接口已按资源增长，按文件分开的 `QuotesController` / `ProjectsController` 便于维护路由、响应码和 Swagger 契约；后续服务的业务接口沿用 Controller。`[ApiController]` 负责请求绑定与格式错误的 400，`SalesExceptionHandler` 仍将应用异常统一映射为 ProblemDetails。Controller 只调用 MediatR，不承担金额计算、版本检查或持久化；这些职责继续由 Domain、Application 和 Infrastructure 负责。`/health` 是框架映射的健康检查，不属于业务路由。
+
+这一选择增加了特性标注和 MVC 配置，但不改变 Clean Architecture 的依赖方向，也不因使用 Controller 而自动获得更强的业务边界。迁移保留原路径、201 Location、400/404/409 行为及 Swagger 示例；按项目查询额外区分项目不存在的 404。后端测试覆盖完整报价编辑、真实 PostgreSQL 并发、三种按项目查询结果及 OpenAPI 元数据，前端继续使用原 URL。
 
 ### 为什么先做宿主和环境检查
 
@@ -380,6 +386,7 @@ Docker Compose 满足本期的本地服务编排需求。Kubernetes、云与鉴�
 | 2026-09-18 | 完成 T01，四层以程序集约束依赖，Minimal API 提供宿主健康检查 | 编译和两项宿主测试通过；三个基础设施容器健康，预算写入被拒绝 |
 | 2026-09-18 | 为核心选择记录业务动机、代价和验证边界 | 后续实现先解释问题与设计，再给代码及验证结果 |
 | 2026-09-19 | Sales 保留 Clean 四层，Compositions 明确采用六边形端口与适配器；Library、Budget 保持简单分层 | T04.3 / T05 落实并对照解释；统一跨服务规范，不增加业务范围；本次仅更新设计文档 |
+| 2026-10-24 | Sales 业务 API 迁移为按资源分文件的 Controller；后续服务业务 API 沿用 Controller；按项目查报价区分 200/204/404 | 仅 HTTP 入口与缺失项目查询语义变化；保持用例/领域/存储边界及既有路径，测试验证契约 |
 | 2026-09-24 | Quantity 采用仅含正 decimal 的不可变 record，计量单位关联留到报价行；独立 Domain 测试 | 从一个业务不变量开始，避免默认零值绕过校验；本步不引入 API 或持久化 |
 | 2026-09-24 | Money 保留 decimal 原值，仅支持 EUR，允许负金额并显式舍入到分 | 避免单价提前舍入；售价的非负约束留给 QuoteLine，金额运算与持久化后续实现 |
 | 2026-09-24 | QuoteLine 持有行 ID、工程项说明及单位，关联 Quantity 与 Money，并计算只读行金额 | 验证非负售价、空值和最终舍入；修改、归属及唯一性留给下一步 Quote 聚合 |

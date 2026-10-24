@@ -29,6 +29,13 @@ public sealed partial class QuoteHttpTests
         var byProjectResponses = paths.GetProperty("/quotes/by-project/{projectId}").GetProperty("get").GetProperty("responses");
         Assert.True(byProjectResponses.TryGetProperty("200", out _));
         Assert.True(byProjectResponses.TryGetProperty("204", out _));
+        Assert.True(byProjectResponses.TryGetProperty("404", out _));
+        Assert.Equal("GetQuoteByProject", paths.GetProperty("/quotes/by-project/{projectId}")
+            .GetProperty("get").GetProperty("operationId").GetString());
+        Assert.Equal("按项目查询报价", paths.GetProperty("/quotes/by-project/{projectId}")
+            .GetProperty("get").GetProperty("summary").GetString());
+        Assert.Equal("11111111-1111-1111-1111-111111111111", paths.GetProperty("/quotes/by-project/{projectId}")
+            .GetProperty("get").GetProperty("parameters")[0].GetProperty("schema").GetProperty("default").GetString());
         var edit = paths.GetProperty("/quotes/{quoteId}/lines/{lineId}/quantity").GetProperty("patch");
         Assert.True(edit.GetProperty("responses").TryGetProperty("409", out _));
         Assert.True(edit.TryGetProperty("requestBody", out _));

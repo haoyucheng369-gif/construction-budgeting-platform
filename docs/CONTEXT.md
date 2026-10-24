@@ -1,6 +1,6 @@
 # 项目上下文与协作约定
 
-最近更新：2026-09-25。本文件保存跨会话需要延续的约定，不复制完整聊天记录，也不作为第二份进度清单。
+最近更新：2026-10-24。本文件保存跨会话需要延续的约定，不复制完整聊天记录，也不作为第二份进度清单。
 
 ## 接续方式
 
@@ -25,6 +25,7 @@
 | Clean / 六边形 | Sales 保留 Clean 四层；Compositions 明确按六边形的输入/输出端口与适配器组织；Library、Budget 延续简单分层；共同遵循依赖向内，不叠加两套框架 |
 | DDD | 从 Quote 聚合、QuoteLine 实体、Money / Quantity 值对象和业务约束开始 |
 | CQRS + MediatR | 命令与查询在代码层分开；MediatR 只做进程内分发 |
+| HTTP API | 业务接口使用按资源/功能分文件的 ASP.NET Core Controller；Controller 只负责 HTTP 契约和用例分发，不放领域计算。`/health` 保留框架健康检查映射。后续服务的业务 API 沿用 Controller，不增加 Minimal API 业务路由 |
 | 微服务与事件 | 实际跨进程发布/消费；基本重试、去重、旧结果保护和可定位的失败 |
 | EF Core / 双库 | PostgreSQL 持久化报价及结果；SQL Server 读取预算基准；不跨服务表访问 |
 | React Query / SignalR | 请求和缓存服务器数据、通知后刷新、断线补读、可见的编辑冲突 |

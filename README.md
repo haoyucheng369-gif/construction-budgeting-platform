@@ -1,8 +1,8 @@
 # Construction Budgeting Platform
 
-Construction ERP services for project quotations, resource costing, budget comparison, and margin calculation. Changes to quantities and resource prices propagate between services through an event bus, with real-time updates to the quotation workspace.
+Construction ERP services for project quotations, resource costing, budget comparison, and margin calculation. The target workflow propagates quantity and resource-price changes through an event bus and updates the quotation workspace in real time.
 
-**Project status:** Sales exposes a minimal project catalog (create/list/get) and the draft-quotation workflow (create/query, add/remove lines, change quantities and sales prices). Quote creation requires an existing project; PostgreSQL preserves existing quotation links during the project migration and enforces the relationship and one-quote-per-project rule. Real database tests cover edits, persistence and version conflicts. Development-only Swagger UI provides request examples. The React application lists projects and reads the selected project's quotation, including its lines and server-calculated sales amount; browser-based editing, other service hosts, messaging, cost/budget results, margin and SignalR remain planned. See the [delivery checklist](docs/TODO.md) for verified progress and the [six implementation stages](docs/implementation-plan.zh-CN.md) for the roadmap.
+**Project status:** Sales exposes a small project catalog (create/list/get) and the draft-quotation workflow (create/query, add/remove lines, change quantities and sales prices) through ASP.NET Core controllers. Quote creation requires an existing project; PostgreSQL preserves existing quotation links during the project migration and enforces the relationship and one-quote-per-project rule. Real database tests cover edits, persistence and version conflicts. Development-only Swagger UI provides request examples. The React application lists projects and reads the selected project's quotation, including its lines and server-calculated sales amount; browser-based editing, other service hosts, messaging, cost/budget results, margin and SignalR remain planned. See the [delivery checklist](docs/TODO.md) for verified progress and the [six implementation stages](docs/implementation-plan.zh-CN.md) for the roadmap.
 
 ## Core workflow
 
@@ -16,7 +16,7 @@ The initial release uses EUR, tax-exclusive amounts, fixed sales prices, and lin
 
 ## Architecture
 
-Four independently runnable .NET services share versioned integration contracts:
+The architecture calls for four independently runnable .NET services with versioned integration contracts; Sales is the currently implemented host:
 
 | Service | Responsibility |
 | --- | --- |
@@ -48,7 +48,7 @@ flowchart LR
 
 | Area | Target stack |
 | --- | --- |
-| Backend | .NET 8, C#, ASP.NET Core REST APIs |
+| Backend | .NET 8, C#, ASP.NET Core controller-based REST APIs |
 | Frontend | React, TypeScript, React Query |
 | Architecture | Hexagonal / Clean Architecture, DDD, CQRS |
 | In-process dispatch | MediatR |
@@ -154,7 +154,7 @@ npm ci
 npm run dev
 ```
 
-Open `http://127.0.0.1:5173/`. The page reads `GET /projects` through the Vite development proxy. Selecting a project calls `GET /quotes/by-project/{projectId}` and displays the stored quotation, lines, version and server-calculated sales total. A project without a quotation receives HTTP 204 and shows an empty state; request failures show a retry action. Selection is local page state and resets on refresh. Vite runs on port 5173 and forwards `/api/*` to the Sales API on port 5080. The current page does not create or edit quotations. `npm run build` runs TypeScript checking and produces the production assets in `frontend/dist`.
+Open `http://127.0.0.1:5173/`. The page reads `GET /projects` through the Vite development proxy. Selecting a project calls `GET /quotes/by-project/{projectId}` and displays the stored quotation, lines, version and server-calculated sales total. An existing project without a quotation receives HTTP 204 and shows an empty state; an unknown project receives 404. Other request failures show a retry action. Selection is local page state and resets on refresh. Vite runs on port 5173 and forwards `/api/*` to the Sales API on port 5080. The current page does not create or edit quotations. `npm run build` runs TypeScript checking and produces the production assets in `frontend/dist`.
 
 ### Build, verify and run Sales
 

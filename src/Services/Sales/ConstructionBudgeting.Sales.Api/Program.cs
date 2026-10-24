@@ -11,13 +11,13 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<SalesExceptionHandler>();
 builder.Services.AddHealthChecks();
+builder.Services.AddControllers();
 builder.Services.AddSalesApplication();
 builder.Services.AddDbContextFactory<SalesDbContext>(options => options.UseNpgsql(
     builder.Configuration.GetConnectionString("Sales"),
     postgres => postgres.MigrationsHistoryTable("__EFMigrationsHistory", "sales")));
 builder.Services.AddScoped<IQuoteRepository, EfQuoteRepository>();
 builder.Services.AddScoped<IProjectRepository, EfProjectRepository>();
-builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options => options.OperationFilter<SalesExamplesOperationFilter>());
 
 var app = builder.Build();
@@ -41,8 +41,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.MapQuoteEndpoints();
-app.MapProjectEndpoints();
+app.MapControllers();
 
 // 当前仅检查进程存活；数据库和消息服务的就绪检查随相应功能接入。
 app.MapHealthChecks("/health");

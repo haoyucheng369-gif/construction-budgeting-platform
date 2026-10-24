@@ -16,6 +16,7 @@ public sealed class SalesExamplesOperationFilter : IOperationFilter
             {
                 "id" when operation.OperationId == "GetProject" => new OpenApiString(SalesSampleData.ProjectId.ToString()),
                 "id" or "quoteId" => new OpenApiString(SalesSampleData.QuoteId.ToString()),
+                "projectId" => new OpenApiString(SalesSampleData.ProjectId.ToString()),
                 "lineId" => new OpenApiString(operation.OperationId == "RemoveQuoteLine"
                     ? "44444444-4444-4444-4444-444444444444" : "33333333-3333-3333-3333-333333333333"),
                 "expectedVersion" => new OpenApiLong(3),

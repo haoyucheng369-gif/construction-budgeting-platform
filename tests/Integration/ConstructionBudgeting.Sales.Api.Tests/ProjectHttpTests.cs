@@ -47,6 +47,8 @@ public sealed partial class QuoteHttpTests
 
             await AssertProblemAsync(await client.PostAsJsonAsync("/quotes", new { projectId = Guid.NewGuid() }),
                 HttpStatusCode.NotFound);
+            await AssertProblemAsync(await client.GetAsync($"/quotes/by-project/{Guid.NewGuid()}"),
+                HttpStatusCode.NotFound);
             await AssertProblemAsync(await client.GetAsync($"/projects/{Guid.NewGuid()}"), HttpStatusCode.NotFound);
             await AssertProblemAsync(await client.PostAsJsonAsync("/projects", new { name = "  " }),
                 HttpStatusCode.BadRequest);

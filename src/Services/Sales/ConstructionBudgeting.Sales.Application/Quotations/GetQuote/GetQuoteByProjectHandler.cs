@@ -1,8 +1,9 @@
+using ConstructionBudgeting.Sales.Application.Projects;
 using MediatR;
 
 namespace ConstructionBudgeting.Sales.Application.Quotations.GetQuote;
 
-public sealed class GetQuoteByProjectHandler(IQuoteRepository repository)
+public sealed class GetQuoteByProjectHandler(IQuoteRepository repository, IProjectRepository projects)
     : IRequestHandler<GetQuoteByProjectQuery, GetQuoteResult?>
 {
     public async Task<GetQuoteResult?> Handle(GetQuoteByProjectQuery request, CancellationToken cancellationToken)
@@ -16,6 +17,11 @@ public sealed class GetQuoteByProjectHandler(IQuoteRepository repository)
         }
 
         var quote = await repository.GetByProjectIdAsync(request.ProjectId, cancellationToken);
-        return quote is null ? null : GetQuoteResult.FromQuote(quote);
+        if (quote is not null) return GetQuoteResult.FromQuote(quote);
+
+        if (!await projects.ExistsAsync(request.ProjectId, cancellationToken))
+            throw new ProjectNotFoundException(request.ProjectId);
+
+        return null;
     }
 }

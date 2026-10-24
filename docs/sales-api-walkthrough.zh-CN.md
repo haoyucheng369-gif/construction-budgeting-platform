@@ -1,6 +1,6 @@
 # 项目与报价创建、编辑
 
-Sales 提供项目创建、列表、查询，以及六个报价操作：创建报价、查询报价、添加行、修改数量、修改销售单价、删除行。Swagger UI 已预填示例 ID 和请求体，返回值来自 PostgreSQL。
+Sales 通过 `ProjectsController` 和 `QuotesController` 提供项目创建、列表、查询，以及报价创建、按 ID/项目查询、添加行、修改数量、修改销售单价、删除行。Swagger UI 已预填示例 ID 和请求体，返回值来自 PostgreSQL。
 
 ## 预填参数怎么用
 
@@ -17,6 +17,7 @@ Sales 提供项目创建、列表、查询，以及六个报价操作：创建�
 | 查询项目 | GET /projects/{id} | 200，返回项目 ID、名称 |
 | 创建空报价 | POST /quotes | 201，返回报价 ID、版本 1、零总额及 Location |
 | 查询报价 | GET /quotes/{id} | 200，包含全部报价行和当前版本 |
+| 按项目查询报价 | GET /quotes/by-project/{projectId} | 有报价 200；项目存在但无报价 204；项目不存在 404 |
 | 添加行 | POST /quotes/{quoteId}/lines | 201，返回新行 ID、新总额和新版本 |
 | 修改数量 | PATCH /quotes/{quoteId}/lines/{lineId}/quantity | 200，返回最新金额和版本 |
 | 修改售价 | PATCH /quotes/{quoteId}/lines/{lineId}/sales-unit-price | 200，返回最新金额和版本 |
@@ -108,7 +109,7 @@ ORDER BY "Position";
 ## 代码对应关系
 
 ```text
-Swagger → ProjectEndpoints / QuoteEndpoints
+Swagger → ProjectsController / QuotesController
         → MediatR → GetQuoteHandler / ChangeQuoteLineQuantityHandler
         → IProjectRepository / IQuoteRepository → EF 仓储 → PostgreSQL
 ```
