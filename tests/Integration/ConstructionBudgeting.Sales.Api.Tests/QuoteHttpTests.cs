@@ -26,6 +26,9 @@ public sealed partial class QuoteHttpTests
         Assert.True(paths.GetProperty("/projects").TryGetProperty("post", out _));
         Assert.True(paths.GetProperty("/projects/{id}").TryGetProperty("get", out _));
         Assert.True(paths.GetProperty("/quotes/{id}").GetProperty("get").GetProperty("responses").TryGetProperty("200", out _));
+        var byProjectResponses = paths.GetProperty("/quotes/by-project/{projectId}").GetProperty("get").GetProperty("responses");
+        Assert.True(byProjectResponses.TryGetProperty("200", out _));
+        Assert.True(byProjectResponses.TryGetProperty("204", out _));
         var edit = paths.GetProperty("/quotes/{quoteId}/lines/{lineId}/quantity").GetProperty("patch");
         Assert.True(edit.GetProperty("responses").TryGetProperty("409", out _));
         Assert.True(edit.TryGetProperty("requestBody", out _));

@@ -12,6 +12,48 @@ namespace ConstructionBudgeting.Sales.Application.Tests;
 public sealed class GetQuoteTests
 {
     [Fact]
+    public async Task Query_by_project_returns_the_same_detached_quote_snapshot()
+    {
+        var quote = CreateQuote();
+        AddPainting(quote);
+        var repository = new StubQuoteRepository(quote);
+
+        var result = await new GetQuoteByProjectHandler(repository)
+            .Handle(new(quote.ProjectId), CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal(quote.Id, result.QuoteId);
+        Assert.Equal(quote.ProjectId, result.ProjectId);
+        Assert.Equal(2000m, result.TotalSalesAmount);
+        Assert.Equal(100m, Assert.Single(result.Lines).Quantity);
+        Assert.Equal(1, repository.ProjectReadCalls);
+        Assert.Equal(0, repository.SaveCalls);
+    }
+
+    [Fact]
+    public async Task Query_by_project_returns_null_when_no_quote_exists()
+    {
+        var repository = new StubQuoteRepository(null);
+
+        var result = await new GetQuoteByProjectHandler(repository)
+            .Handle(new(Guid.NewGuid()), CancellationToken.None);
+
+        Assert.Null(result);
+        Assert.Equal(1, repository.ProjectReadCalls);
+    }
+
+    [Fact]
+    public async Task Query_by_project_rejects_an_empty_id_without_reading()
+    {
+        var repository = new StubQuoteRepository(null);
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            new GetQuoteByProjectHandler(repository).Handle(new(Guid.Empty), CancellationToken.None));
+
+        Assert.Equal(0, repository.ProjectReadCalls);
+    }
+
+    [Fact]
     public async Task Query_returns_quote_and_line_fields_in_order_without_modifying_or_saving()
     {
         var quote = CreateQuote();
@@ -189,6 +231,7 @@ public sealed class GetQuoteTests
         public Task AddAsync(Quote newQuote, CancellationToken cancellationToken) => throw new NotSupportedException();
 
         public int ReadCalls { get; private set; }
+        public int ProjectReadCalls { get; private set; }
         public int SaveCalls { get; private set; }
         public Guid RequestedQuoteId { get; private set; }
         public CancellationToken ReadToken { get; private set; }
@@ -201,6 +244,14 @@ public sealed class GetQuoteTests
             ReadToken = cancellationToken;
             return ReadFailure is null
                 ? Task.FromResult(quote?.Id == quoteId ? quote : null)
+                : Task.FromException<Quote?>(ReadFailure);
+        }
+
+        public Task<Quote?> GetByProjectIdAsync(Guid projectId, CancellationToken cancellationToken)
+        {
+            ProjectReadCalls++;
+            return ReadFailure is null
+                ? Task.FromResult(quote?.ProjectId == projectId ? quote : null)
                 : Task.FromException<Quote?>(ReadFailure);
         }
 

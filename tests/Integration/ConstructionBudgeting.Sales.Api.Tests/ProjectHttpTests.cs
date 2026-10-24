@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using ConstructionBudgeting.Sales.Application.Projects;
 using ConstructionBudgeting.Sales.Application.Quotations.CreateQuote;
+using ConstructionBudgeting.Sales.Application.Quotations.GetQuote;
 using Microsoft.EntityFrameworkCore;
 
 namespace ConstructionBudgeting.Sales.Api.Tests;
@@ -30,9 +31,19 @@ public sealed partial class QuoteHttpTests
             var projects = (await client.GetFromJsonAsync<ProjectDetails[]>("/projects"))!;
             Assert.Contains(created, projects);
 
+            var byProjectPath = $"/quotes/by-project/{projectId}";
+            Assert.Equal(HttpStatusCode.NoContent, (await client.GetAsync(byProjectPath)).StatusCode);
+
             var quoteResponse = await client.PostAsJsonAsync("/quotes", new { projectId });
             Assert.Equal(HttpStatusCode.Created, quoteResponse.StatusCode);
-            Assert.Equal(projectId, (await quoteResponse.Content.ReadFromJsonAsync<CreateQuoteResult>())!.ProjectId);
+            var createdQuote = (await quoteResponse.Content.ReadFromJsonAsync<CreateQuoteResult>())!;
+            Assert.Equal(projectId, createdQuote.ProjectId);
+            var byProject = (await client.GetFromJsonAsync<GetQuoteResult>(byProjectPath))!;
+            Assert.Equal(createdQuote.QuoteId, byProject.QuoteId);
+            Assert.Equal(projectId, byProject.ProjectId);
+            Assert.Equal(1L, byProject.Version);
+            Assert.Empty(byProject.Lines);
+            Assert.Equal(0m, byProject.TotalSalesAmount);
 
             await AssertProblemAsync(await client.PostAsJsonAsync("/quotes", new { projectId = Guid.NewGuid() }),
                 HttpStatusCode.NotFound);

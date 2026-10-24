@@ -13,6 +13,9 @@ public interface IQuoteRepository
     /// </summary>
     Task<Quote?> GetByIdAsync(Guid quoteId, CancellationToken cancellationToken);
 
+    // 按项目读取其唯一的草稿报价；尚无报价时返回 null。
+    Task<Quote?> GetByProjectIdAsync(Guid projectId, CancellationToken cancellationToken);
+
     /// <summary>
     /// 仅在数据库版本等于 expectedVersion 时，保存已修改的聚合。
     /// 版本比较和写入必须保证原子性。版本不匹配（包括加载后报价被删除）时，

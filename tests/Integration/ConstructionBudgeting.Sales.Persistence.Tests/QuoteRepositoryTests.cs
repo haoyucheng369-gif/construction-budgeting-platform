@@ -39,6 +39,8 @@ public sealed partial class SalesPersistenceTests
             first.ChangeLineQuantity(first.Lines[0].Id, new Quantity(1m));
             Assert.Equal(120m, second.Lines[0].Quantity.Value);
             Assert.Null(await repository.GetByIdAsync(Guid.NewGuid(), default));
+            Assert.Equal(quote.Id, (await repository.GetByProjectIdAsync(quote.ProjectId, default))!.Id);
+            Assert.Null(await repository.GetByProjectIdAsync(Guid.NewGuid(), default));
         }
         finally { await DeleteQuotesAsync(quote.Id); }
     }

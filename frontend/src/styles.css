@@ -94,3 +94,39 @@ button {
   color: #667586;
   overflow-wrap: anywhere;
 }
+
+.quote-meta {
+  color: #667586;
+  font-size: 0.875rem;
+}
+
+.quote-total {
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+th,
+td {
+  padding: 0.75rem 0.5rem;
+  border-bottom: 1px solid #dfe5eb;
+}
+
+th {
+  font-size: 0.875rem;
+  color: #526172;
+}
+
+td small {
+  display: block;
+  color: #667586;
+}

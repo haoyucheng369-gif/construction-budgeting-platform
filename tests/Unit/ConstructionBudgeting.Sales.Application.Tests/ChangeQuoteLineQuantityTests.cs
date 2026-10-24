@@ -250,6 +250,9 @@ public sealed class ChangeQuoteLineQuantityTests
             return Task.FromResult(quote?.Id == quoteId ? quote : null);
         }
 
+        public Task<Quote?> GetByProjectIdAsync(Guid projectId, CancellationToken cancellationToken) =>
+            Task.FromResult(quote?.ProjectId == projectId ? quote : null);
+
         public Task SaveAsync(Quote editedQuote, long expectedVersion, CancellationToken cancellationToken)
         {
             SaveCalls++;

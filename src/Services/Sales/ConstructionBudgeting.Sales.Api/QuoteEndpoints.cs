@@ -5,6 +5,7 @@ using ConstructionBudgeting.Sales.Application.Quotations.CreateQuote;
 using ConstructionBudgeting.Sales.Application.Quotations.GetQuote;
 using ConstructionBudgeting.Sales.Application.Quotations.RemoveQuoteLine;
 using MediatR;
+using Microsoft.AspNetCore.Http.HttpResults;
 
 namespace ConstructionBudgeting.Sales.Api;
 
@@ -34,6 +35,17 @@ public static class QuoteEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound)
             .WithSummary("查询报价及全部报价行")
             .WithDescription("先执行查询，记下当前 version。所有修改使用最新版本；示例参数指向预置报价。");
+
+        quotes.MapGet("/by-project/{projectId:guid}", async Task<Results<Ok<GetQuoteResult>, NoContent>>
+            (Guid projectId, ISender sender, CancellationToken cancellationToken) =>
+        {
+            var result = await sender.Send(new GetQuoteByProjectQuery(projectId), cancellationToken);
+            return result is null ? TypedResults.NoContent() : TypedResults.Ok(result);
+        })
+            .WithName("GetQuoteByProject")
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .WithSummary("按项目查询报价")
+            .WithDescription("项目尚无报价时返回 204；已有报价时返回与按报价 ID 查询相同的结果。");
 
         quotes.MapPost("/{quoteId:guid}/lines",
             async (Guid quoteId, AddQuoteLineRequest request, ISender sender, CancellationToken cancellationToken) =>

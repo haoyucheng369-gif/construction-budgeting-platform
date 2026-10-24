@@ -32,6 +32,13 @@ public sealed class EfQuoteRepository(IDbContextFactory<SalesDbContext> contextF
             .SingleOrDefaultAsync(quote => quote.Id == quoteId, cancellationToken);
     }
 
+    public async Task<Quote?> GetByProjectIdAsync(Guid projectId, CancellationToken cancellationToken)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+        return await context.ReadQuotes().AsSingleQuery()
+            .SingleOrDefaultAsync(quote => quote.ProjectId == projectId, cancellationToken);
+    }
+
     // 保存修改后的报价，expectedVersion 是修改前的版本。
     public async Task SaveAsync(Quote quote, long expectedVersion, CancellationToken cancellationToken)
     {

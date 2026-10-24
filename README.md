@@ -2,7 +2,7 @@
 
 Construction ERP services for project quotations, resource costing, budget comparison, and margin calculation. Changes to quantities and resource prices propagate between services through an event bus, with real-time updates to the quotation workspace.
 
-**Project status:** Sales exposes a minimal project catalog (create/list/get) and the draft-quotation workflow (create/query, add/remove lines, change quantities and sales prices). Quote creation requires an existing project; PostgreSQL preserves existing quotation links during the project migration and enforces the relationship and one-quote-per-project rule. Real database tests cover edits, persistence, version conflicts and project selection. Development-only Swagger UI provides request examples. The React application currently lists and selects projects from the Sales API; quotation reading and editing in the browser, other service hosts, messaging, cost/budget results, margin and SignalR remain planned. See the [delivery checklist](docs/TODO.md) for verified progress and the [six implementation stages](docs/implementation-plan.zh-CN.md) for the roadmap.
+**Project status:** Sales exposes a minimal project catalog (create/list/get) and the draft-quotation workflow (create/query, add/remove lines, change quantities and sales prices). Quote creation requires an existing project; PostgreSQL preserves existing quotation links during the project migration and enforces the relationship and one-quote-per-project rule. Real database tests cover edits, persistence and version conflicts. Development-only Swagger UI provides request examples. The React application lists projects and reads the selected project's quotation, including its lines and server-calculated sales amount; browser-based editing, other service hosts, messaging, cost/budget results, margin and SignalR remain planned. See the [delivery checklist](docs/TODO.md) for verified progress and the [six implementation stages](docs/implementation-plan.zh-CN.md) for the roadmap.
 
 ## Core workflow
 
@@ -144,7 +144,7 @@ The migrations create `sales.Projects`, `sales.Quotes`, `sales.QuoteLines` and m
 
 Follow the [step-by-step Swagger and pgAdmin walkthrough](docs/sales-api-walkthrough.zh-CN.md) to use prefilled examples or create a quote from scratch, add lines, change quantities/prices, delete lines and observe stale-version conflicts. The sample initializer runs only with the explicit Development command `--seed-sample`; repeat runs preserve existing edits.
 
-### Run the project selector
+### Run the quotation reader
 
 Start the Sales API on `http://127.0.0.1:5080` using the command below or the Visual Studio launch profile. In a second terminal, run:
 
@@ -154,7 +154,7 @@ npm ci
 npm run dev
 ```
 
-Open `http://127.0.0.1:5173/`. The page reads `GET /projects` through the Vite development proxy and lets you select a project. The selection is local page state and resets on refresh. Vite runs on port 5173; the proxy forwards `/api/*` requests to the Sales API on port 5080. The current page does not read or edit quotations. `npm run build` runs TypeScript checking and produces the production assets in `frontend/dist`.
+Open `http://127.0.0.1:5173/`. The page reads `GET /projects` through the Vite development proxy. Selecting a project calls `GET /quotes/by-project/{projectId}` and displays the stored quotation, lines, version and server-calculated sales total. A project without a quotation receives HTTP 204 and shows an empty state; request failures show a retry action. Selection is local page state and resets on refresh. Vite runs on port 5173 and forwards `/api/*` to the Sales API on port 5080. The current page does not create or edit quotations. `npm run build` runs TypeScript checking and produces the production assets in `frontend/dist`.
 
 ### Build, verify and run Sales
 
