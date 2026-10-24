@@ -1,0 +1,35 @@
+.quote-meta {
+  color: #667586;
+  font-size: 0.875rem;
+}
+
+.quote-total {
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.quote-panel table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.quote-panel th,
+.quote-panel td {
+  padding: 0.75rem 0.5rem;
+  border-bottom: 1px solid #dfe5eb;
+}
+
+.quote-panel th {
+  font-size: 0.875rem;
+  color: #526172;
+}
+
+.quote-panel td small {
+  display: block;
+  color: #667586;
+}

@@ -18,7 +18,9 @@
 - 本次验证（2026-10-24，按项目读取报价）：`./scripts/Test-SalesPersistence.ps1` 的 locked-mode 还原、build（0 警告/0 错误）及 164 项测试全通过（领域 108、应用 30、持久化 12、API 14；含真实 PostgreSQL）。`npm run build` 的 TypeScript 检查与 Vite 构建通过。实际 Sales `GET /quotes/by-project/11111111-1111-1111-1111-111111111111` 返回 HTTP 200、2 行、版本 5、销售总额 2469.98；Vite 代理返回同一报价，页面入口及 Swagger 均 HTTP 200。无报价 204 经真实数据库 API 集成测试验证；浏览器手动选择与故障提示尚未点击验收，留在 T03.3。
 - 已完成任务：**T03.1c**。按项目查报价返回：已有报价 200、已有项目无报价 204、项目不存在 404；业务入口改为 `QuotesController`、`ProjectsController`，`/health` 仍由框架映射。后续服务业务 API 沿用 Controller。
 - 本次验证（2026-10-24，Controller 与契约）：PostgreSQL 容器 healthy；.NET 8 Release/Debug 构建均为 0 警告、0 错误。Release 全套 165 项测试通过（领域 108、应用 31、持久化 12、API 14，无跳过，包含真实 PostgreSQL）；`npm run build` 通过。新宿主 Swagger operationId、中文摘要和 200/204/400/404 文档均可读；真实 API 的示例项目返回 200、未知项目返回 404，`/health` 返回 200。现有 API 集成测试覆盖无报价 204、201 Location、编辑和 409。未代用户点击浏览器 UI，留在 T03.3。
-- 当前任务／下一步：**T03.2a** 先讲清“无报价”时创建空报价的页面流程，再实现创建按钮、成功后刷新报价以及重复创建的提示；后续再分步加行编辑。Library/Compositions/Budget、事件及 SignalR 尚未开始。
+- 已完成任务：**T03.1d**。React 仍为一个应用，app 壳保存所选 projectId 并组合 projects、quotes 功能模块；各模块持有自己的 API、类型、组件与样式，原有项目选择和报价只读流程保留。微前端运行时拆分安排在核心业务闭环后的 T11。
+- 本次验证（2026-10-24，前端模块化）：`cd frontend; npm run build` 的 TypeScript 检查与 Vite 构建通过；现有 Vite `/`、`/api/projects` 和示例项目的 `/api/quotes/by-project/{projectId}` 均 HTTP 200。`git diff --check` 通过；未重跑未修改的后端测试，未执行浏览器点击，浏览器交互验收仍归 T03.3。
+- 当前任务／下一步：**T03.2a** 在选中项目尚无报价时从页面创建空报价，成功后刷新报价并处理重复创建提示；先解释页面状态与 API 调用，再实现这一小步。Library/Compositions/Budget、事件及 SignalR 尚未开始。
 - 本机启动复查（2026-10-24）：PostgreSQL healthy；旧 Debug API 进程已重启，Sales API（5080）加载新 Controller，Swagger/health/报价查询实际返回预期；Vite（5173）页面入口返回 200。进程可能随会话结束，接续时重新检查，不能与 VS F5 的同端口 API 同时启动。SQL Server 与 RabbitMQ 未启动；不要沿用历史报价版本，先 GET。
 - 环境：Windows；SDK 8.0.425 / 运行时 8.0.31 已在用户目录单独安装；原 SDK 10.0.300 保留；Node 22.22.0、npm 10.9.4；Docker 29.1.3、Compose 2.40.3。
 - 本机数据库查看工具：用户已安装 Windows 桌面版 pgAdmin，连接 `127.0.0.1:5432`、数据库 `vente`、账号 `sales_app`，密码取本机 `.env`。按用户要求已删除旧网页工具容器 `construction-pgadmin`、专属设置卷 `construction-pgadmin-data` 和镜像 `dpage/pgadmin4:9.18`；不再使用 5050 网页入口。项目 PostgreSQL 及其 `construction-budgeting_postgres-data` 数据卷保留；本次迁移后 sales schema 包含 Projects、Quotes、QuoteLines 三张业务表。原网页工具宿主机配置目录仍保留但不再使用。
@@ -99,6 +101,7 @@ T02.3b 验证（2026-09-25）：`docker desktop start`、`docker compose up -d -
 - [x] T03.1a 建立前端骨架，用 React Query 从真实 Sales API 列出项目并可选择；TypeScript 构建与本地 HTTP 代理验证通过。
 - [x] T03.1b 按 ProjectId 读取对应报价并显示后端返回的报价数据；HTTP 200/204 和真实数据库查询通过，失败提示分支已实现并通过前端构建，浏览器手动验收归 T03.3。
 - [x] T03.1c 将按项目查报价定为已有报价 200、已有项目无报价 204、项目不存在 404；Sales 业务 API 使用 QuotesController 和 ProjectsController，保留现有路由、201 Location、400/409 ProblemDetails 与 Swagger 示例；验证应用、HTTP、前端契约。
+- [x] T03.1d 将 React 现有页面拆为 app 壳、projects 与 quotes 功能模块，API 请求与类型归各自模块；保留原有页面状态，TypeScript/Vite 构建通过。
 - [ ] T03.2 实现创建报价、行编辑/删除、保存、加载和错误提示；显示服务器返回金额。
 - [ ] T03.2a 在选中项目尚无报价时从页面创建空报价，成功后刷新，处理重复创建冲突。
 - [ ] T03.3 在浏览器完成创建、修改、刷新恢复，记录操作结果。
@@ -164,6 +167,14 @@ T02.3b 验证（2026-09-25）：`docker desktop start`、`docker compose up -d -
 
 验收：从启动到报价、改价、重算、通知的全过程可复现，有对应检查记录。
 
+## 后续阶段：微前端拆分（核心业务闭环后）
+
+- [ ] T11.1 根据已实现的报价工作台与资源价格页面确定 UI 边界、壳的职责及 projectId 等跨模块输入；选择与当前 React/Vite 版本兼容的运行时组合方式。
+- [ ] T11.2 将有独立界面的模块分为可独立构建的前端产物，由壳在本机运行时组合；不按后端服务数量机械拆分页面。
+- [ ] T11.3 验证模块可分别启动/构建、壳中页面与真实 API 正常工作，以及其中一个模块不可用时的可见错误；未验证独立部署前不宣称可独立发布。
+
+验收：保留核心报价与资源价格流程，前端模块边界和运行时组合通过本机联调；本阶段不阻塞 T01–T10 的两周业务闭环。
+
 ## 可选增强（不阻塞 T01–T10）
 
 - [ ] O01 事务性 Outbox：业务状态与待发消息同事务；验证提交后进程中断再恢复发布，覆盖下游消费者发布。
@@ -216,3 +227,4 @@ Kubernetes、云、CI/CD、鉴权、Redis、多实例、自动定价与完整端
 | 2026-10-20 | T03.1a 本机测试启动 | 启动并复查 PostgreSQL healthy、Sales API 5080、Vite 5173；Sales health/projects/Swagger 与页面/代理均 HTTP 200，代理读到 2 个现有项目。未改业务代码，未执行浏览器点击或测试套件；SQL Server/RabbitMQ 保持停止 | 用户测试项目下拉；下一代码任务仍为 T03.1b |
 | 2026-10-24 | T03.1b 按项目读取报价 | 新增 Sales 按 ProjectId 查询、API 200/204 和 React Query 报价读取/展示；共用现有报价快照，不增加迁移或依赖。`./scripts/Test-SalesPersistence.ps1` locked-mode 还原/build/164 项全通过；`npm run build` 通过；真实 API 与 Vite 代理读取示例报价 HTTP 200，空报价 204 经数据库集成测试。浏览器点击未验收；提交状态以 Git 记录为准 | T03.2a 无报价时从页面创建空报价 |
 | 2026-10-24 | T03.1c API 契约与 Controller | `GetQuoteByProjectHandler` 在无报价时确认项目是否存在；Sales 路由改为两个 Controller，保留 URL/Location/ProblemDetails/Swagger 示例。Release 全套 165 项含真实 PostgreSQL 测试通过，Debug/Release 构建 0 警告/错误，前端构建通过；重启 5080 后 Swagger、真实项目 200、未知项目 404、健康检查 200。无报价 204、创建 Location 与并发 409 由 API 集成测试验证；浏览器点击未验收 | T03.2a 页面创建空报价 |
+| 2026-10-24 | T03.1d 前端功能模块壳 | `frontend/src/app` 组合项目选择与报价模块；projects/quotes 各自持有组件、API 类型/请求和样式，仅以 projectId 衔接。`cd frontend; npm run build` 通过；Vite 页面、项目代理和报价代理 HTTP 200；`git diff --check` 通过。后端测试未重跑，浏览器点击未验收；T11 记录核心闭环后的微前端拆分 | T03.2a 从页面创建空报价 |

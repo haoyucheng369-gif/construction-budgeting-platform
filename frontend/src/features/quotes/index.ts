@@ -1,0 +1,1 @@
+export { QuotePanel } from './QuotePanel'

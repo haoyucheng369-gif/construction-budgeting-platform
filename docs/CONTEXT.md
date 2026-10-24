@@ -13,6 +13,7 @@
 - 约两周完成建筑 ERP 的核心报价流程：报价编辑、成本组成、预算比较、毛利、实时更新。
 - 两个业务入口：修改报价数量/销售价；修改资源成本价并传播到受影响报价。
 - 保留独立的 Sales、Library、Compositions、Budget 服务，逐个实现，控制业务规模。
+- React 先作为一个应用完成核心业务链，但从当前页面起按业务功能模块组织；核心链完成后再把有独立界面的模块逐步拆成微前端。前端边界按页面能力划分，不要求与后端服务一一对应。
 - 使用 .NET 8、React/TypeScript/React Query、Clean/Hexagonal 原则、DDD、CQRS、MediatR、MassTransit/RabbitMQ、PostgreSQL、SQL Server 只读访问、SignalR 和 Docker Compose。
 - 本期不做 Kubernetes、上云、CI/CD、鉴权/权限、Redis、多实例、主从复制、Event Sourcing、Saga、自动定价或其他 ERP 模块。
 - 固定资源配方通过种子数据初始化；业务金额由后端统一计算。具体公式、数据归属和消息版本见架构决策。
@@ -29,6 +30,7 @@
 | 微服务与事件 | 实际跨进程发布/消费；基本重试、去重、旧结果保护和可定位的失败 |
 | EF Core / 双库 | PostgreSQL 持久化报价及结果；SQL Server 读取预算基准；不跨服务表访问 |
 | React Query / SignalR | 请求和缓存服务器数据、通知后刷新、断线补读、可见的编辑冲突 |
+| 前端模块化 / 后续微前端 | 当前单 React 应用由 app 壳组合 projects、quotes 等功能模块；各模块拥有自己的请求、类型、组件和样式，通过明确的项目 ID 等输入协作。业务闭环后再引入运行时组合与独立构建，不让前端拆分阻塞本期服务联调 |
 | C# 基础 | 接口、DI 生命周期、async/await、LINQ、decimal 等随对应代码解释，不额外扩展成独立工程 |
 | 质量 | 关键业务规则单测与必要集成检查；宿主健康检查不等于业务验收 |
 | Outbox | 理解数据库提交与消息发送之间的故障窗口，列为可选增强，不阻塞核心流程 |
