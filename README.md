@@ -1,3 +1,5 @@
+release modif
+
 # Construction Budgeting Platform
 
 Construction ERP services for projects, resource costing, price studies, quotations, budget comparison, and margin calculation. The target workflow selects resources, calculates estimated cost, derives a customer-price suggestion using a fixed 10% cost markup, and propagates quantity and resource-price changes through an event bus.
