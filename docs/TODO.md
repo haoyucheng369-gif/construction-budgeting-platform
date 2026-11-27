@@ -20,6 +20,7 @@
 - 本次验证（2026-10-24，Controller 与契约）：PostgreSQL 容器 healthy；.NET 8 Release/Debug 构建均为 0 警告、0 错误。Release 全套 165 项测试通过（领域 108、应用 31、持久化 12、API 14，无跳过，包含真实 PostgreSQL）；`npm run build` 通过。新宿主 Swagger operationId、中文摘要和 200/204/400/404 文档均可读；真实 API 的示例项目返回 200、未知项目返回 404，`/health` 返回 200。现有 API 集成测试覆盖无报价 204、201 Location、编辑和 409。未代用户点击浏览器 UI，留在 T03.3。
 - 已完成任务：**T03.1d**。React 仍为一个应用，app 壳保存所选 projectId 并组合 projects、quotes 功能模块；各模块持有自己的 API、类型、组件与样式，原有项目选择和报价只读流程保留。微前端运行时拆分安排在核心业务闭环后的 T11。
 - 本次验证（2026-10-24，前端模块化）：`cd frontend; npm run build` 的 TypeScript 检查与 Vite 构建通过；现有 Vite `/`、`/api/projects` 和示例项目的 `/api/quotes/by-project/{projectId}` 均 HTTP 200。`git diff --check` 通过；未重跑未修改的后端测试，未执行浏览器点击，浏览器交互验收仍归 T03.3。
+- 业务范围调整（2026-10-24）：四个业务视角为项目/业务（Affaire）、资源库（Library）、价格研究（Étude de prix）、预算（Budget），沿用 Sales/Library/Compositions/Budget 四个服务边界。新增模型只保留主流程必要属性。计划从预计成本按固定 10% 成本加价生成建议售价；采用后已保存销售价不随资源改价自动变化。当前只完成手动售价报价，建议价、资源成本和预算联动均未实现；具体规则见架构决策第 4、8 节。
 - 当前任务／下一步：**T03.2a** 在选中项目尚无报价时从页面创建空报价，成功后刷新报价并处理重复创建提示；先解释页面状态与 API 调用，再实现这一小步。Library/Compositions/Budget、事件及 SignalR 尚未开始。
 - 本机启动复查（2026-10-24）：PostgreSQL healthy；旧 Debug API 进程已重启，Sales API（5080）加载新 Controller，Swagger/health/报价查询实际返回预期；Vite（5173）页面入口返回 200。进程可能随会话结束，接续时重新检查，不能与 VS F5 的同端口 API 同时启动。SQL Server 与 RabbitMQ 未启动；不要沿用历史报价版本，先 GET。
 - 环境：Windows；SDK 8.0.425 / 运行时 8.0.31 已在用户目录单独安装；原 SDK 10.0.300 保留；Node 22.22.0、npm 10.9.4；Docker 29.1.3、Compose 2.40.3。
@@ -34,6 +35,7 @@
 - [x] P01 确定两周范围与明确排除项。
 - [x] P02 记录四服务边界、两数据库归属、业务公式和事件流。
 - [x] P03 建立任务清单、验收条件与后续接续规则。
+- [x] P04 收敛通用建筑业务链与四个业务视角；记录固定 10% 成本加价、简化模型和既有四服务的职责映射，仅更新设计与进度文档。
 
 ## 第一周：报价与跨服务重算
 
@@ -119,6 +121,7 @@ T02.3b 验证（2026-09-25）：`docker desktop start`、`docker compose up -d -
 ### T05 成本组成重算（第 5 天）
 
 - [ ] T05.1 初始化刷漆/地板配方，关联资源和报价行，完成数量 × 消耗系数 × 成本单价计算。
+- [ ] T05.1a 在报价工作台从预置资源/工程项中选择并关联成本组成，保留现有手动添加报价行入口；验证选取后成本由后端计算。
 - [ ] T05.2 持久化成本快照和计算修订号，发布 CompositionCosted；处理重复输入和旧资源/报价版本。
 - [ ] T05.3 通过输入端口直接驱动用例，以内存或测试替身实现输出端口，验证数量变化、资源改价、销售价变化和删除报价行；检查成本变化及不应变化的情况，并单独验证真实适配器集成。
 
@@ -130,7 +133,8 @@ T02.3b 验证（2026-09-25）：`docker desktop start`、`docker compose up -d -
 
 - [ ] T06.1 建 Budget 独立宿主和 SQL Server 只读适配器；初始化预算基准，确认应用账号写入被拒绝。
 - [ ] T06.2 消费成本结果，保存预算差额，发布 BudgetImpactCalculated；Sales 保存毛利与最终报价视图。
-- [ ] T06.3 页面显示成本明细、预算、差额、毛利、毛利率和来源版本；处理未配置基准与计算中状态。
+- [ ] T06.2a Sales 根据预计成本提供固定 10% 成本加价的建议售价，并允许用于报价；已保存售价仍可手动编辑且不因资源改价自动变化。验证加价率与毛利率的区别、金额舍入及成本改价行为。
+- [ ] T06.3 页面显示成本明细、建议售价及采用操作、预算、差额、毛利、毛利率和来源版本；处理未配置基准与计算中状态。
 - [ ] T06.4 对照架构文档四行固定金额样例验证全链路，检查结果应用不触发事件循环。
 
 验收：修改报价和修改资源两条路径均更新最终页面，SQL Server 基准不被改变。
@@ -181,7 +185,7 @@ T02.3b 验证（2026-09-25）：`docker desktop start`、`docker compose up -d -
 - [ ] O02 补充更多金额边界、资源扇出和错误恢复的自动化检查。
 - [ ] O03 在不新增页面或服务的前提下完善表格可读性和操作反馈。
 
-Kubernetes、云、CI/CD、鉴权、Redis、多实例、自动定价与完整端到端测试平台不列入本期候选任务。
+Kubernetes、云、CI/CD、鉴权、Redis、多实例、复杂/动态定价与完整端到端测试平台不列入本期候选任务。
 
 ## 工作记录
 
@@ -228,3 +232,4 @@ Kubernetes、云、CI/CD、鉴权、Redis、多实例、自动定价与完整端
 | 2026-10-24 | T03.1b 按项目读取报价 | 新增 Sales 按 ProjectId 查询、API 200/204 和 React Query 报价读取/展示；共用现有报价快照，不增加迁移或依赖。`./scripts/Test-SalesPersistence.ps1` locked-mode 还原/build/164 项全通过；`npm run build` 通过；真实 API 与 Vite 代理读取示例报价 HTTP 200，空报价 204 经数据库集成测试。浏览器点击未验收；提交状态以 Git 记录为准 | T03.2a 无报价时从页面创建空报价 |
 | 2026-10-24 | T03.1c API 契约与 Controller | `GetQuoteByProjectHandler` 在无报价时确认项目是否存在；Sales 路由改为两个 Controller，保留 URL/Location/ProblemDetails/Swagger 示例。Release 全套 165 项含真实 PostgreSQL 测试通过，Debug/Release 构建 0 警告/错误，前端构建通过；重启 5080 后 Swagger、真实项目 200、未知项目 404、健康检查 200。无报价 204、创建 Location 与并发 409 由 API 集成测试验证；浏览器点击未验收 | T03.2a 页面创建空报价 |
 | 2026-10-24 | T03.1d 前端功能模块壳 | `frontend/src/app` 组合项目选择与报价模块；projects/quotes 各自持有组件、API 类型/请求和样式，仅以 projectId 衔接。`cd frontend; npm run build` 通过；Vite 页面、项目代理和报价代理 HTTP 200；`git diff --check` 通过。后端测试未重跑，浏览器点击未验收；T11 记录核心闭环后的微前端拆分 | T03.2a 从页面创建空报价 |
+| 2026-10-24 | P04 通用建筑业务链收敛 | CONTEXT、架构决策、实施计划和 README 明确四个业务视角与四服务映射、最少必要模型、固定 10% 成本加价及既有售价不自动改写；TODO 增加 T05.1a/T06.2a。仅修改文档；`git diff --check` 通过，未运行代码测试或新业务功能 | T03.2a 从页面创建空报价 |

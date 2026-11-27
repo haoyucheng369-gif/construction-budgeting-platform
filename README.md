@@ -1,18 +1,18 @@
 # Construction Budgeting Platform
 
-Construction ERP services for project quotations, resource costing, budget comparison, and margin calculation. The target workflow propagates quantity and resource-price changes through an event bus and updates the quotation workspace in real time.
+Construction ERP services for projects, resource costing, price studies, quotations, budget comparison, and margin calculation. The target workflow selects resources, calculates estimated cost, derives a customer-price suggestion using a fixed 10% cost markup, and propagates quantity and resource-price changes through an event bus.
 
 **Project status:** Sales exposes a small project catalog (create/list/get) and the draft-quotation workflow (create/query, add/remove lines, change quantities and sales prices) through ASP.NET Core controllers. Quote creation requires an existing project; PostgreSQL preserves existing quotation links during the project migration and enforces the relationship and one-quote-per-project rule. Real database tests cover edits, persistence and version conflicts. Development-only Swagger UI provides request examples. The React application is organized into an app shell and project/quotation feature modules; it lists projects and reads the selected project's quotation, including its lines and server-calculated sales amount. Browser-based editing, other service hosts, messaging, cost/budget results, margin and SignalR remain planned. See the [delivery checklist](docs/TODO.md) for verified progress and the [six implementation stages](docs/implementation-plan.zh-CN.md) for the roadmap.
 
 ## Core workflow
 
 1. Create a project and a draft quotation.
-2. Add work items with quantities, sales prices, and material/labor compositions.
-3. Change a quote quantity, sales price, or resource cost.
-4. Recalculate estimated cost, compare it with the existing budget, and update margin.
+2. Select material and labor resources for work items and calculate estimated cost.
+3. Derive a suggested sales price using a fixed 10% cost markup; retain the ability to edit the saved quotation price.
+4. Change a quote quantity, sales price, or resource cost; recalculate estimated cost, compare it with the existing budget, and update margin.
 5. Notify connected clients and refresh the affected quotation data.
 
-The initial release uses EUR, tax-exclusive amounts, fixed sales prices, and linear resource consumption. Resource-cost changes affect costs and margin without automatically changing customer sales prices.
+The initial release uses EUR, tax-exclusive amounts, and linear resource consumption. The markup is based on cost, not a 10% margin on sales. Once a suggested price is adopted, resource-cost changes affect cost and margin without automatically changing the saved customer price. The cost-based suggestion and cross-service workflow are planned; current Sales APIs accept manually supplied sales prices.
 
 ## Architecture
 
@@ -24,6 +24,8 @@ The architecture calls for four independently runnable .NET services with versio
 | Library | Material and labor resources and their cost prices |
 | Compositions | Work-item recipes, resource-price projections and quote cost calculations |
 | Budget | Read existing budget baselines and calculate budget variance |
+
+The business flow groups these capabilities as a project/business record (Affaire), resource library (Library), price study (Étude de prix), and budget comparison (Budget). These are business views rather than a one-to-one mapping to service processes: Sales owns the minimal project and quotation, while Compositions calculates the study's estimated cost. The scope excludes project milestones, contract conversion, site progress, and actual-expense accounting.
 
 Each service keeps business rules separate from persistence, transport and API adapters. MediatR dispatches commands, queries and domain-event handlers within a process; MassTransit/RabbitMQ carries integration events between services.
 
